@@ -2,13 +2,25 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Euricio CRM standard capabilities",
-  "windows": ["main"],
+  "windows": [
+    "main"
+  ],
   "permissions": [
     "core:default",
+    "core:event:default",
+    "core:window:default",
     "sql:allow-execute",
     "sql:allow-select",
     "sql:allow-close",
+    "sql:allow-load",
+    "store:allow-load",
+    "store:allow-get",
+    "store:allow-set",
+    "store:allow-save",
+    "store:allow-delete",
+    "store:allow-clear",
     "notification:default",
-    "deep-link:default"
+    "deep-link:default",
+    "single-instance:default"
   ]
 }
