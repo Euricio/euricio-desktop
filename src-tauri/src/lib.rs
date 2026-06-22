@@ -57,6 +57,7 @@ pub fn run() {
             commands::auth::login,
             commands::auth::logout,
             commands::auth::get_session,
+            commands::auth::refresh_token,
             commands::contacts::list_contacts,
             commands::contacts::get_contact,
             commands::contacts::upsert_contact,
