@@ -1,5 +1,5 @@
 use tauri::{
-    App, Manager,
+    App, Manager, Emitter,
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, TrayIconBuilder, TrayIconEvent},
 };
@@ -32,7 +32,6 @@ pub fn setup(app: &mut App) -> tauri::Result<()> {
             _ => {}
         })
         .on_tray_icon_event(|tray, event| {
-            // Linksklick auf Tray-Icon: Fenster zeigen
             if let TrayIconEvent::Click { button: MouseButton::Left, .. } = event {
                 let app = tray.app_handle();
                 if let Some(w) = app.get_webview_window("main") {
