@@ -1,0 +1,81 @@
+{
+  "app": {
+    "navigation": {
+      "contacts": "Kontakte",
+      "tasks": "Aufgaben",
+      "properties": "Objekte",
+      "activities": "Aktivitäten",
+      "settings": "Einstellungen"
+    },
+    "sync": {
+      "status": {
+        "synced": "Synchronisiert",
+        "pending": "Synchronisierung ausstehend",
+        "offline": "Offline",
+        "error": "Synchronisierungsfehler",
+        "in_progress": "Synchronisierung läuft..."
+      },
+      "action": {
+        "sync_now": "Jetzt synchronisieren"
+      },
+      "last_synced": "Zuletzt synchronisiert: {{time}}"
+    },
+    "calls": {
+      "incoming": "Eingehender Anruf",
+      "unknown_number": "Unbekannte Nummer",
+      "contact_found": "Kontakt gefunden",
+      "create_contact": "Neuer Kontakt",
+      "create_lead": "Neuer Lead",
+      "open": "Öffnen"
+    },
+    "contacts": {
+      "list_empty": "Keine Kontakte vorhanden",
+      "search_placeholder": "Kontakt suchen...",
+      "phone": "Telefon",
+      "email": "E-Mail",
+      "company": "Unternehmen",
+      "notes": "Notizen",
+      "created_at": "Erstellt am",
+      "open": "Kontakt öffnen"
+    },
+    "tasks": {
+      "list_empty": "Keine Aufgaben vorhanden",
+      "priority": {
+        "high": "Hoch",
+        "medium": "Mittel",
+        "low": "Niedrig"
+      },
+      "status": {
+        "open": "Offen",
+        "done": "Erledigt"
+      }
+    },
+    "errors": {
+      "network": "Netzwerkfehler",
+      "auth_expired": "Sitzung abgelaufen",
+      "sync_failed": "Synchronisierung fehlgeschlagen",
+      "conflict": "Konflikt erkannt",
+      "login_failed": "Anmeldung fehlgeschlagen"
+    },
+    "settings": {
+      "language": "Sprache",
+      "sync_interval": "Sync-Intervall",
+      "notifications": "Benachrichtigungen"
+    },
+    "common": {
+      "dismiss": "Schließen",
+      "save": "Speichern",
+      "cancel": "Abbrechen",
+      "loading": "Wird geladen...",
+      "error": "Fehler"
+    }
+  },
+  "auth": {
+    "login": "Anmelden",
+    "logout": "Abmelden",
+    "email": "E-Mail-Adresse",
+    "password": "Passwort",
+    "login_button": "Anmelden",
+    "logging_in": "Anmeldung läuft..."
+  }
+}
