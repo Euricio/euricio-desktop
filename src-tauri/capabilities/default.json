@@ -1,0 +1,14 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Euricio CRM standard capabilities",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "sql:allow-execute",
+    "sql:allow-select",
+    "sql:allow-close",
+    "notification:default",
+    "deep-link:default"
+  ]
+}
