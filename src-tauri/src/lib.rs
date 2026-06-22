@@ -61,6 +61,7 @@ pub fn run() {
             commands::contacts::list_contacts,
             commands::contacts::get_contact,
             commands::contacts::upsert_contact,
+            commands::contacts::delete_contact,
             commands::sync::trigger_sync,
             commands::sync::get_sync_status,
             commands::sync::reset_sync_cursors,
