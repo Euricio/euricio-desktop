@@ -1,70 +1,104 @@
-# Euricio Desktop CRM
+# Euricio CRM Desktop
 
-Plattformübergreifende Desktop-CRM-Anwendung für Euricio.
-Gebaut mit **Tauri 2** · **React** · **TypeScript** · **SQLite** · **Rust**.
+Plattformübergreifende CRM-Desktop-App für das Euricio-Team.  
+Gebaut mit **Tauri 2** (Rust) + **React** (TypeScript) + **SQLite** (offline-first).
 
-Synchronisiert sich mit dem Web-CRM unter [crm.euricio.es](https://crm.euricio.es) via Elixir/Phoenix-Backend.
+## Stack
+
+| Schicht | Technologie |
+|---|---|
+| Shell | Tauri 2 (Rust) |
+| Frontend | React 18 + TypeScript + Vite |
+| Datenbank | SQLite (3 DBs: crm, auth, cache) |
+| Auth | Supabase JWT |
+| Backend-Sync | Elixir/Phoenix auf Fly.io |
+| i18n | react-i18next (de, en, es, ca, eu) |
 
 ## Voraussetzungen
 
-- [Rust](https://rustup.rs/) stable
-- [Node.js](https://nodejs.org/) 20+
-- Plattform-Abhängigkeiten: https://v2.tauri.app/start/prerequisites/
+```bash
+# Rust
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
-## Entwicklung starten
+# Node.js 20+
+# https://nodejs.org oder via nvm
+
+# Linux: System-Dependencies
+sudo apt install -y libwebkit2gtk-4.1-dev libgtk-3-dev \
+  libayatana-appindicator3-dev librsvg2-dev patchelf
+```
+
+## Entwicklung
 
 ```bash
+git clone https://github.com/Euricio/euricio-desktop.git
+cd euricio-desktop
 npm install
 npm run tauri dev
 ```
 
-## Produktions-Build
-
-```bash
-npm run tauri build
-```
-
-Erzeugt Installationspakete unter `src-tauri/target/release/bundle/`:
-- **macOS:** `.dmg` / `.app`
-- **Windows:** `.exe` (NSIS) / `.msi`
-- **Linux:** `.AppImage` / `.deb` / `.rpm`
-
-## Protokoll-Handler
-
-Die App registriert das `euricio://`-Protokoll:
-
-| URL | Aktion |
-|---|---|
-| `euricio://incoming-call?phone=+34600123456` | Eingehenden Anruf anzeigen |
-| `euricio://contact/{id}` | Kontaktdetail öffnen |
-| `euricio://lead/{id}` | Lead öffnen |
-| `euricio://task/{id}` | Aufgabe öffnen |
-| `euricio://sync` | Synchronisierung manuell starten |
-
-## Sprachen
-
-| Code | Sprache |
-|---|---|
-| `de` | Deutsch |
-| `en` | English |
-| `es` | Español |
-| `ca` | Català |
-| `eu` | Euskara |
-
-Fallback: Spanisch (`es`) → Englisch (`en`)
-
 ## Architektur
 
-Drei SQLite-Datenbanken nach Concern getrennt:
-- `crm.db` — Domänendaten (Kontakte, Leads, Objekte, Aufgaben, Aktivitäten, Sync-Queue)
-- `auth.db` — Session / Tokens
-- `cache.db` — Einstellungen, Telefon-Lookup-Cache, Event-Log
+```
+src/                          # React Frontend
+├── screens/                  # Login, Contacts, ContactDetail, Tasks, Settings
+├── components/
+│   ├── layout/               # AppShell, Sidebar, SyncStatusBar
+│   └── calls/                # CallPopup
+├── i18n/locales/             # de, en, es, ca, eu
+└── utils/                    # format.ts, phone.ts
+
+src-tauri/src/                # Rust Backend
+├── commands/                 # auth, contacts, sync, calls
+├── sync/                     # engine, pull, push, outbox
+├── db/migrations.rs          # SQLite-Schemas
+├── tray.rs                   # System-Tray
+├── deep_link.rs              # euricio:// URL-Handler
+└── i18n.rs                   # Systemsprache erkennen
+```
+
+## SQLite-Datenbanken
+
+| DB | Tabellen | Zweck |
+|---|---|---|
+| `crm.db` | contacts, tasks, notes, outbox | Domänendaten |
+| `auth.db` | session | JWT-Session |
+| `cache.db` | settings, sync_state | Einstellungen, Sync-Cursor |
+
+## Sync-Strategie
+
+1. **Pull**: Delta-Sync via Cursor gegen `GET /api/v2/contacts?cursor=...`
+2. **Push**: Outbox-Pattern — lokale Änderungen werden in `outbox.json` gequeued und bei nächster Verbindung gesendet (max. 3 Retries)
+3. **Konflikt**: Last-Write-Wins (Server gewinnt bei Pull, Client gewinnt bei Push)
+4. **Interval**: alle 30 Sekunden + manueller Trigger via Tray-Menü
+
+## Deep Links
+
+```
+euricio://incoming-call?phone=+34600000000
+euricio://contact/<id>
+euricio://task/<id>
+euricio://sync
+```
 
 ## Release
 
 ```bash
-git tag desktop-v0.1.0
-git push origin desktop-v0.1.0
+# Version taggen → GitHub Actions baut automatisch für alle Plattformen
+git tag v0.2.0
+git push origin v0.2.0
 ```
 
-GitHub Actions baut automatisch für alle drei Plattformen.
+Builds für: macOS (arm64 + x86_64), Linux (AppImage + .deb), Windows (.msi + .exe)
+
+## Verbindungen
+
+| Service | URL |
+|---|---|
+| Elixir Backend | `https://euricio-crm.fly.dev` |
+| Supabase | `https://vddfghfvmnrbotmxhvvi.supabase.co` |
+| Web-CRM | `https://crm.euricio.es` |
+
+---
+
+© 2026 Euricio · ez@euricio.es
