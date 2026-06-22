@@ -4,7 +4,7 @@ use tauri_plugin_store::StoreExt;
 use tokio::time;
 
 const SYNC_INTERVAL_SECS: u64 = 30;
-const HEALTH_URL: &str = "https://euricio-crm.fly.dev/health";
+const API_BASE: &str = "https://euricio-crm.fly.dev";
 
 pub async fn run(app: AppHandle) {
     // Ersten Sync kurz nach Start (5s Delay damit UI bereit ist)
@@ -14,7 +14,7 @@ pub async fn run(app: AppHandle) {
         run_cycle(&app_initial).await;
     });
 
-    // Manuellen Sync-Trigger abonnieren (vom Tray-Menü oder Frontend)
+    // Manuellen Sync-Trigger abonnieren
     let app_trigger = app.clone();
     app.listen("trigger-sync", move |_| {
         let handle = app_trigger.clone();
@@ -32,18 +32,19 @@ pub async fn run(app: AppHandle) {
 }
 
 pub async fn run_cycle(app: &AppHandle) {
-    // Wenn kein Token vorhanden: still überspringen (Benutzer nicht eingeloggt)
+    // Wenn kein Token vorhanden: still überspringen
     if !has_session(app) {
         return;
     }
 
-    let online = check_online().await;
+    // Connectivity-Check via TCP (zuverlässiger als reqwest auf manchen Systemen)
+    let online = check_online_tcp().await;
     app.emit("sync:online", online).ok();
 
     if !online {
         app.emit("sync:status", SyncStatusEvent {
             status: "offline".into(),
-            message: None,
+            message: Some("Keine Verbindung zum Server".into()),
             timestamp: now_ts(),
         }).ok();
         return;
@@ -55,7 +56,7 @@ pub async fn run_cycle(app: &AppHandle) {
         timestamp: now_ts(),
     }).ok();
 
-    // 1. Outbox leeren (lokale Änderungen hochladen)
+    // 1. Outbox leeren
     match super::push::process_outbox(app).await {
         Ok(pushed) => {
             if pushed > 0 {
@@ -63,9 +64,8 @@ pub async fn run_cycle(app: &AppHandle) {
             }
         }
         Err(e) => {
-            // Auth-Fehler still ignorieren — nicht als Banner anzeigen
             if is_auth_error(&e) {
-                log::debug!("Sync Push: kein Token verfügbar, überspringe");
+                log::debug!("Sync Push: kein Token verfügbar");
                 return;
             }
             log::warn!("Sync Push fehlgeschlagen: {e}");
@@ -87,9 +87,8 @@ pub async fn run_cycle(app: &AppHandle) {
             }
         }
         Err(e) => {
-            // Auth-Fehler still ignorieren
             if is_auth_error(&e) {
-                log::debug!("Sync Pull: kein Token verfügbar, überspringe");
+                log::debug!("Sync Pull: kein Token verfügbar");
                 return;
             }
             log::warn!("Sync Pull fehlgeschlagen: {e}");
@@ -109,7 +108,31 @@ pub async fn run_cycle(app: &AppHandle) {
     }).ok();
 }
 
-/// Prüft ob ein Token im Store vorhanden ist (Benutzer eingeloggt)
+/// TCP-Connect zu fly.dev Port 443 — umgeht TLS-Probleme beim reinen Connectivity-Check
+async fn check_online_tcp() -> bool {
+    use tokio::net::TcpStream;
+    use tokio::time::timeout;
+
+    // Löse Hostname auf und verbinde TCP
+    let result = timeout(
+        Duration::from_secs(5),
+        TcpStream::connect("euricio-crm.fly.dev:443"),
+    )
+    .await;
+
+    match result {
+        Ok(Ok(_)) => true,
+        Ok(Err(e)) => {
+            log::warn!("TCP connect fehlgeschlagen: {}", e);
+            false
+        }
+        Err(_) => {
+            log::warn!("TCP connect timeout");
+            false
+        }
+    }
+}
+
 fn has_session(app: &AppHandle) -> bool {
     app.store("auth.json")
         .ok()
@@ -119,26 +142,11 @@ fn has_session(app: &AppHandle) -> bool {
         .unwrap_or(false)
 }
 
-/// Auth-Fehler: kein Token, abgelaufen, oder 401
 fn is_auth_error(e: &str) -> bool {
     e.contains("Kein Auth-Store")
         || e.contains("Keine aktive Session")
         || e.contains("Kein Access-Token")
         || e.contains("Authentifizierung abgelaufen")
-}
-
-async fn check_online() -> bool {
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(5))
-        .build()
-        .unwrap_or_default();
-
-    client
-        .get(HEALTH_URL)
-        .send()
-        .await
-        .map(|r| r.status().is_success())
-        .unwrap_or(false)
 }
 
 fn now_ts() -> i64 {
