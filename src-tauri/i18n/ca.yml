@@ -1,0 +1,13 @@
+tray:
+  open: "Obrir CRM"
+  sync: "Sincronitzar"
+  quit: "Sortir"
+  incoming_call: "Trucada entrant"
+
+notifications:
+  incoming_call: "Trucada de %{name}"
+  sync_done: "Sincronització completada"
+  conflict_detected: "Conflicte a %{entity}"
+
+app:
+  name: "Euricio CRM"
