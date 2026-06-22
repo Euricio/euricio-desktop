@@ -33,7 +33,9 @@
     "synced": "Sinkronizatuta",
     "syncing": "Sinkronizatzen...",
     "error": "Sinkronizazio errorea",
-    "lastSync": "Azken sinkronizazioa"
+    "lastSync": "Azken sinkronizazioa",
+    "justNow": "Oraintxe bertan",
+    "pending": "zain"
   },
   "common": {
     "yes": "Bai",
