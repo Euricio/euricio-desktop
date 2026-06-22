@@ -33,7 +33,9 @@
     "synced": "Synced",
     "syncing": "Syncing...",
     "error": "Sync error",
-    "lastSync": "Last synced"
+    "lastSync": "Last synced",
+    "justNow": "Just now",
+    "pending": "pending"
   },
   "common": {
     "yes": "Yes",
