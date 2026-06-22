@@ -1,81 +1,52 @@
 {
-  "app": {
-    "navigation": {
-      "contacts": "Contacts",
-      "tasks": "Tasks",
-      "properties": "Properties",
-      "activities": "Activities",
-      "settings": "Settings"
-    },
-    "sync": {
-      "status": {
-        "synced": "Synced",
-        "pending": "Sync pending",
-        "offline": "Offline",
-        "error": "Sync error",
-        "in_progress": "Syncing..."
-      },
-      "action": {
-        "sync_now": "Sync now"
-      },
-      "last_synced": "Last synced: {{time}}"
-    },
-    "calls": {
-      "incoming": "Incoming call",
-      "unknown_number": "Unknown number",
-      "contact_found": "Contact found",
-      "create_contact": "New contact",
-      "create_lead": "New lead",
-      "open": "Open"
-    },
-    "contacts": {
-      "list_empty": "No contacts",
-      "search_placeholder": "Search contacts...",
-      "phone": "Phone",
-      "email": "Email",
-      "company": "Company",
-      "notes": "Notes",
-      "created_at": "Created at",
-      "open": "Open contact"
-    },
-    "tasks": {
-      "list_empty": "No tasks",
-      "priority": {
-        "high": "High",
-        "medium": "Medium",
-        "low": "Low"
-      },
-      "status": {
-        "open": "Open",
-        "done": "Done"
-      }
-    },
-    "errors": {
-      "network": "Network error",
-      "auth_expired": "Session expired",
-      "sync_failed": "Sync failed",
-      "conflict": "Conflict detected",
-      "login_failed": "Login failed"
-    },
-    "settings": {
-      "language": "Language",
-      "sync_interval": "Sync interval",
-      "notifications": "Notifications"
-    },
-    "common": {
-      "dismiss": "Dismiss",
-      "save": "Save",
-      "cancel": "Cancel",
-      "loading": "Loading...",
-      "error": "Error"
-    }
+  "nav": {
+    "contacts": "Contacts",
+    "tasks": "Tasks",
+    "settings": "Settings"
   },
   "auth": {
-    "login": "Sign in",
-    "logout": "Sign out",
-    "email": "Email address",
+    "email": "Email",
     "password": "Password",
-    "login_button": "Sign in",
-    "logging_in": "Signing in..."
+    "signIn": "Sign In",
+    "signingIn": "Signing in...",
+    "signOut": "Sign Out",
+    "confirmSignOut": "Are you sure you want to sign out?",
+    "hint": "Authorized Euricio staff only"
+  },
+  "settings": {
+    "account": "Account",
+    "language": "Language",
+    "connection": "Connection",
+    "tokenExpiry": "Token expires"
+  },
+  "contacts": {
+    "title": "Contacts",
+    "search": "Search...",
+    "noContacts": "No contacts found",
+    "new": "New"
+  },
+  "tasks": {
+    "title": "Tasks",
+    "noTasks": "No tasks"
+  },
+  "sync": {
+    "synced": "Synced",
+    "syncing": "Syncing...",
+    "error": "Sync error",
+    "lastSync": "Last synced"
+  },
+  "common": {
+    "yes": "Yes",
+    "cancel": "Cancel",
+    "save": "Save",
+    "delete": "Delete",
+    "edit": "Edit",
+    "close": "Close",
+    "loading": "Loading..."
+  },
+  "tray": {
+    "open": "Open",
+    "sync": "Sync now",
+    "quit": "Quit"
   }
 }
