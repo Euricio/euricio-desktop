@@ -1,4 +1,4 @@
-use tauri::Manager;
+use tauri::{Manager, Listener};
 
 mod commands;
 mod db;
@@ -15,7 +15,6 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
-            // Zweite Instanz gestartet: Deep Link weiterleiten + Fenster fokussieren
             deep_link::handle_args(app, argv);
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.unminimize();
@@ -33,24 +32,20 @@ pub fn run() {
                 .build(),
         )
         .setup(|app| {
-            // Systemsprache ermitteln und i18n initialisieren
             let locale = i18n::detect_system_locale();
             rust_i18n::set_locale(&locale);
 
-            // System-Tray aufbauen
             tray::setup(app)?;
 
-            // Sync-Engine im Hintergrund starten
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 sync::engine::run(handle).await;
             });
 
-            // Deep-Link-Listener für laufende Instanz registrieren
             let handle2 = app.handle().clone();
             app.listen("deep-link://new-url", move |event| {
                 let payload = event.payload();
-                let url_str = payload.trim_matches('"');
+                let url_str = payload.trim_matches('"'');
                 if let Ok(url) = url::Url::parse(url_str) {
                     deep_link::handle_url(&handle2, url);
                 }
