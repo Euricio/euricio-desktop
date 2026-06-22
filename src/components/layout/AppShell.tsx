@@ -1,10 +1,10 @@
 import { useState } from "react";
-import { useTranslation } from "react-i18next";
 import Sidebar from "./Sidebar";
 import SyncStatusBar from "./SyncStatusBar";
 import Contacts from "../../screens/Contacts";
 import Tasks from "../../screens/Tasks";
 import Settings from "../../screens/Settings";
+import CallPopup, { useCallListener } from "../calls/CallPopup";
 
 interface SessionInfo {
   user_id: string;
@@ -24,18 +24,23 @@ export type Screen = "contacts" | "tasks" | "settings";
 
 export default function AppShell({ session, onLogout }: AppShellProps) {
   const [currentScreen, setCurrentScreen] = useState<Screen>("contacts");
-  const { t } = useTranslation();
+  const { activeCall, startCall, endCall } = useCallListener();
 
   function renderScreen() {
     switch (currentScreen) {
       case "contacts":
-        return <Contacts session={session} />;
+        return (
+          <Contacts
+            session={session}
+            onCall={(phone, name) => startCall(phone, name)}
+          />
+        );
       case "tasks":
         return <Tasks session={session} />;
       case "settings":
         return <Settings session={session} onLogout={onLogout} />;
       default:
-        return <Contacts session={session} />;
+        return <Contacts session={session} onCall={startCall} />;
     }
   }
 
@@ -47,11 +52,19 @@ export default function AppShell({ session, onLogout }: AppShellProps) {
         session={session}
       />
       <div style={styles.main}>
-        <div style={styles.content}>
-          {renderScreen()}
-        </div>
+        <div style={styles.content}>{renderScreen()}</div>
         <SyncStatusBar accessToken={session.access_token} />
       </div>
+
+      {/* Call-Popup — zeigt sich über allem */}
+      {activeCall && (
+        <CallPopup
+          phone={activeCall.phone}
+          name={activeCall.name}
+          direction={activeCall.direction}
+          onClose={endCall}
+        />
+      )}
     </div>
   );
 }
