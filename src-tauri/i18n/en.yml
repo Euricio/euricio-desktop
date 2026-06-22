@@ -1,0 +1,13 @@
+tray:
+  open: "Open CRM"
+  sync: "Sync"
+  quit: "Quit"
+  incoming_call: "Incoming call"
+
+notifications:
+  incoming_call: "Call from %{name}"
+  sync_done: "Sync completed"
+  conflict_detected: "Conflict in %{entity}"
+
+app:
+  name: "Euricio CRM"
