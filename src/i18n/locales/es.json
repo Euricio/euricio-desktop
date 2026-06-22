@@ -1,0 +1,81 @@
+{
+  "app": {
+    "navigation": {
+      "contacts": "Contactos",
+      "tasks": "Tareas",
+      "properties": "Inmuebles",
+      "activities": "Actividades",
+      "settings": "Ajustes"
+    },
+    "sync": {
+      "status": {
+        "synced": "Sincronizado",
+        "pending": "Sincronización pendiente",
+        "offline": "Sin conexión",
+        "error": "Error de sincronización",
+        "in_progress": "Sincronizando..."
+      },
+      "action": {
+        "sync_now": "Sincronizar ahora"
+      },
+      "last_synced": "Última sincronización: {{time}}"
+    },
+    "calls": {
+      "incoming": "Llamada entrante",
+      "unknown_number": "Número desconocido",
+      "contact_found": "Contacto encontrado",
+      "create_contact": "Nuevo contacto",
+      "create_lead": "Nuevo lead",
+      "open": "Ver"
+    },
+    "contacts": {
+      "list_empty": "Sin contactos",
+      "search_placeholder": "Buscar contacto...",
+      "phone": "Teléfono",
+      "email": "Correo",
+      "company": "Empresa",
+      "notes": "Notas",
+      "created_at": "Creado el",
+      "open": "Ver contacto"
+    },
+    "tasks": {
+      "list_empty": "Sin tareas",
+      "priority": {
+        "high": "Alta",
+        "medium": "Media",
+        "low": "Baja"
+      },
+      "status": {
+        "open": "Abierta",
+        "done": "Completada"
+      }
+    },
+    "errors": {
+      "network": "Error de red",
+      "auth_expired": "Sesión expirada",
+      "sync_failed": "Error al sincronizar",
+      "conflict": "Conflicto detectado",
+      "login_failed": "Error al iniciar sesión"
+    },
+    "settings": {
+      "language": "Idioma",
+      "sync_interval": "Intervalo de sincronización",
+      "notifications": "Notificaciones"
+    },
+    "common": {
+      "dismiss": "Cerrar",
+      "save": "Guardar",
+      "cancel": "Cancelar",
+      "loading": "Cargando...",
+      "error": "Error"
+    }
+  },
+  "auth": {
+    "login": "Iniciar sesión",
+    "logout": "Cerrar sesión",
+    "email": "Correo electrónico",
+    "password": "Contraseña",
+    "login_button": "Entrar",
+    "logging_in": "Entrando..."
+  }
+}
