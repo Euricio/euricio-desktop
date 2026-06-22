@@ -1,81 +1,52 @@
 {
-  "app": {
-    "navigation": {
-      "contacts": "Kontakte",
-      "tasks": "Aufgaben",
-      "properties": "Objekte",
-      "activities": "Aktivitäten",
-      "settings": "Einstellungen"
-    },
-    "sync": {
-      "status": {
-        "synced": "Synchronisiert",
-        "pending": "Synchronisierung ausstehend",
-        "offline": "Offline",
-        "error": "Synchronisierungsfehler",
-        "in_progress": "Synchronisierung läuft..."
-      },
-      "action": {
-        "sync_now": "Jetzt synchronisieren"
-      },
-      "last_synced": "Zuletzt synchronisiert: {{time}}"
-    },
-    "calls": {
-      "incoming": "Eingehender Anruf",
-      "unknown_number": "Unbekannte Nummer",
-      "contact_found": "Kontakt gefunden",
-      "create_contact": "Neuer Kontakt",
-      "create_lead": "Neuer Lead",
-      "open": "Öffnen"
-    },
-    "contacts": {
-      "list_empty": "Keine Kontakte vorhanden",
-      "search_placeholder": "Kontakt suchen...",
-      "phone": "Telefon",
-      "email": "E-Mail",
-      "company": "Unternehmen",
-      "notes": "Notizen",
-      "created_at": "Erstellt am",
-      "open": "Kontakt öffnen"
-    },
-    "tasks": {
-      "list_empty": "Keine Aufgaben vorhanden",
-      "priority": {
-        "high": "Hoch",
-        "medium": "Mittel",
-        "low": "Niedrig"
-      },
-      "status": {
-        "open": "Offen",
-        "done": "Erledigt"
-      }
-    },
-    "errors": {
-      "network": "Netzwerkfehler",
-      "auth_expired": "Sitzung abgelaufen",
-      "sync_failed": "Synchronisierung fehlgeschlagen",
-      "conflict": "Konflikt erkannt",
-      "login_failed": "Anmeldung fehlgeschlagen"
-    },
-    "settings": {
-      "language": "Sprache",
-      "sync_interval": "Sync-Intervall",
-      "notifications": "Benachrichtigungen"
-    },
-    "common": {
-      "dismiss": "Schließen",
-      "save": "Speichern",
-      "cancel": "Abbrechen",
-      "loading": "Wird geladen...",
-      "error": "Fehler"
-    }
+  "nav": {
+    "contacts": "Kontakte",
+    "tasks": "Aufgaben",
+    "settings": "Einstellungen"
   },
   "auth": {
-    "login": "Anmelden",
-    "logout": "Abmelden",
-    "email": "E-Mail-Adresse",
+    "email": "E-Mail",
     "password": "Passwort",
-    "login_button": "Anmelden",
-    "logging_in": "Anmeldung läuft..."
+    "signIn": "Anmelden",
+    "signingIn": "Anmelden...",
+    "signOut": "Abmelden",
+    "confirmSignOut": "Wirklich abmelden?",
+    "hint": "Nur für autorisierte Euricio-Mitarbeiter"
+  },
+  "settings": {
+    "account": "Konto",
+    "language": "Sprache",
+    "connection": "Verbindung",
+    "tokenExpiry": "Token läuft ab"
+  },
+  "contacts": {
+    "title": "Kontakte",
+    "search": "Suchen...",
+    "noContacts": "Keine Kontakte gefunden",
+    "new": "Neu"
+  },
+  "tasks": {
+    "title": "Aufgaben",
+    "noTasks": "Keine Aufgaben"
+  },
+  "sync": {
+    "synced": "Synchronisiert",
+    "syncing": "Synchronisiere...",
+    "error": "Sync-Fehler",
+    "lastSync": "Zuletzt synchronisiert"
+  },
+  "common": {
+    "yes": "Ja",
+    "cancel": "Abbrechen",
+    "save": "Speichern",
+    "delete": "Löschen",
+    "edit": "Bearbeiten",
+    "close": "Schließen",
+    "loading": "Laden..."
+  },
+  "tray": {
+    "open": "Öffnen",
+    "sync": "Jetzt synchronisieren",
+    "quit": "Beenden"
   }
 }
