@@ -9,6 +9,7 @@ interface SessionInfo {
   full_name?: string;
   avatar_url?: string;
   access_token: string;
+  refresh_token: string;
   expires_at: string;
 }
 
@@ -31,7 +32,7 @@ export default function Login({ onSuccess }: LoginProps) {
     try {
       const session = await invoke<SessionInfo>("login", { email, password });
 
-      // Session im persistenten Store speichern
+      // Session inkl. refresh_token im persistenten Store speichern
       const store = await Store.load("auth.json", { autoSave: true });
       await store.set("session", session);
 
