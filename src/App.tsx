@@ -11,6 +11,7 @@ interface SessionInfo {
   full_name?: string;
   avatar_url?: string;
   access_token: string;
+  refresh_token: string;
   expires_at: string;
 }
 
@@ -23,6 +24,41 @@ export default function App() {
   useEffect(() => {
     checkSession();
   }, []);
+
+  // Auto-refresh: alle 50 Minuten Token erneuern (Supabase-Standard: 60 Min)
+  useEffect(() => {
+    if (appState !== "authenticated" || !session) return;
+
+    const interval = setInterval(async () => {
+      await tryRefresh();
+    }, 50 * 60 * 1000);
+
+    return () => clearInterval(interval);
+  }, [appState, session]);
+
+  async function tryRefresh(): Promise<boolean> {
+    try {
+      const store = await Store.load("auth.json", { autoSave: true });
+      const stored = await store.get<SessionInfo>("session");
+      if (!stored?.refresh_token) return false;
+
+      const newSession = await invoke<SessionInfo>("refresh_token", {
+        refreshToken: stored.refresh_token,
+      });
+
+      // refresh_token aus altem Store übernehmen falls nicht zurückgegeben
+      const merged: SessionInfo = {
+        ...newSession,
+        refresh_token: newSession.refresh_token || stored.refresh_token,
+      };
+
+      await store.set("session", merged);
+      setSession(merged);
+      return true;
+    } catch {
+      return false;
+    }
+  }
 
   async function checkSession() {
     try {
@@ -40,9 +76,14 @@ export default function App() {
       const fiveMinutes = 5 * 60 * 1000;
 
       if (expiresAt - now < fiveMinutes) {
-        // Token fast abgelaufen — versuche zu erneuern
-        // Refresh-Token ist im Store nicht gespeichert in dieser Version
-        // → ausloggen
+        // Token abgelaufen — automatisch erneuern wenn refresh_token vorhanden
+        if (stored.refresh_token) {
+          const refreshed = await tryRefreshWithToken(stored.refresh_token);
+          if (refreshed) {
+            return; // tryRefreshWithToken setzt session + appState
+          }
+        }
+        // Kein Refresh möglich → ausloggen
         await store.delete("session");
         setAppState("unauthenticated");
         return;
@@ -52,6 +93,27 @@ export default function App() {
       setAppState("authenticated");
     } catch {
       setAppState("unauthenticated");
+    }
+  }
+
+  async function tryRefreshWithToken(refreshToken: string): Promise<boolean> {
+    try {
+      const store = await Store.load("auth.json", { autoSave: true });
+      const newSession = await invoke<SessionInfo>("refresh_token", {
+        refreshToken,
+      });
+
+      const merged: SessionInfo = {
+        ...newSession,
+        refresh_token: newSession.refresh_token || refreshToken,
+      };
+
+      await store.set("session", merged);
+      setSession(merged);
+      setAppState("authenticated");
+      return true;
+    } catch {
+      return false;
     }
   }
 
