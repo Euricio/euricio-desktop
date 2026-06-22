@@ -1,81 +1,52 @@
 {
-  "app": {
-    "navigation": {
-      "contacts": "Kontaktuak",
-      "tasks": "Atazak",
-      "properties": "Ondasunak",
-      "activities": "Jarduerak",
-      "settings": "Ezarpenak"
-    },
-    "sync": {
-      "status": {
-        "synced": "Sinkronizatuta",
-        "pending": "Sinkronizazioa zain",
-        "offline": "Konexiorik gabe",
-        "error": "Sinkronizazio errorea",
-        "in_progress": "Sinkronizatzen..."
-      },
-      "action": {
-        "sync_now": "Orain sinkronizatu"
-      },
-      "last_synced": "Azken sinkronizazioa: {{time}}"
-    },
-    "calls": {
-      "incoming": "Sarrerako deia",
-      "unknown_number": "Ezezagunaren zenbakia",
-      "contact_found": "Kontaktua aurkitu da",
-      "create_contact": "Kontaktu berria",
-      "create_lead": "Lead berria",
-      "open": "Ikusi"
-    },
-    "contacts": {
-      "list_empty": "Kontakturik ez",
-      "search_placeholder": "Kontaktua bilatu...",
-      "phone": "Telefonoa",
-      "email": "Posta elektronikoa",
-      "company": "Enpresa",
-      "notes": "Oharrak",
-      "created_at": "Sortze data",
-      "open": "Kontaktua ikusi"
-    },
-    "tasks": {
-      "list_empty": "Atazerik ez",
-      "priority": {
-        "high": "Altua",
-        "medium": "Ertaina",
-        "low": "Baxua"
-      },
-      "status": {
-        "open": "Irekia",
-        "done": "Eginda"
-      }
-    },
-    "errors": {
-      "network": "Sareko errorea",
-      "auth_expired": "Saioa iraungitu da",
-      "sync_failed": "Sinkronizazio errorea",
-      "conflict": "Gatazka aurkitu da",
-      "login_failed": "Saioa hasteko errorea"
-    },
-    "settings": {
-      "language": "Hizkuntza",
-      "sync_interval": "Sinkronizazio tartea",
-      "notifications": "Jakinarazpenak"
-    },
-    "common": {
-      "dismiss": "Itxi",
-      "save": "Gorde",
-      "cancel": "Utzi",
-      "loading": "Kargatzen...",
-      "error": "Errorea"
-    }
+  "nav": {
+    "contacts": "Kontaktuak",
+    "tasks": "Zereginak",
+    "settings": "Ezarpenak"
   },
   "auth": {
-    "login": "Saioa hasi",
-    "logout": "Saioa itxi",
-    "email": "Helbide elektronikoa",
+    "email": "Posta elektronikoa",
     "password": "Pasahitza",
-    "login_button": "Sartu",
-    "logging_in": "Sartzen..."
+    "signIn": "Hasi saioa",
+    "signingIn": "Saioa hasten...",
+    "signOut": "Amaitu saioa",
+    "confirmSignOut": "Ziur saioa amaitu nahi duzula?",
+    "hint": "Euricionen langile baimenduak soilik"
+  },
+  "settings": {
+    "account": "Kontua",
+    "language": "Hizkuntza",
+    "connection": "Konexioa",
+    "tokenExpiry": "Tokena iraungitzen da"
+  },
+  "contacts": {
+    "title": "Kontaktuak",
+    "search": "Bilatu...",
+    "noContacts": "Ez da kontakturik aurkitu",
+    "new": "Berria"
+  },
+  "tasks": {
+    "title": "Zereginak",
+    "noTasks": "Ez dago zereginik"
+  },
+  "sync": {
+    "synced": "Sinkronizatuta",
+    "syncing": "Sinkronizatzen...",
+    "error": "Sinkronizazio errorea",
+    "lastSync": "Azken sinkronizazioa"
+  },
+  "common": {
+    "yes": "Bai",
+    "cancel": "Utzi",
+    "save": "Gorde",
+    "delete": "Ezabatu",
+    "edit": "Editatu",
+    "close": "Itxi",
+    "loading": "Kargatzen..."
+  },
+  "tray": {
+    "open": "Ireki",
+    "sync": "Sinkronizatu orain",
+    "quit": "Irten"
   }
 }
