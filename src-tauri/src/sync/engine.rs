@@ -31,6 +31,11 @@ pub async fn run(app: AppHandle) {
 }
 
 pub async fn run_cycle(app: &AppHandle) {
+    // Wenn kein Token vorhanden: still überspringen (Benutzer nicht eingeloggt)
+    if !has_session(app) {
+        return;
+    }
+
     let online = check_online().await;
     app.emit("sync:online", online).ok();
 
@@ -57,6 +62,11 @@ pub async fn run_cycle(app: &AppHandle) {
             }
         }
         Err(e) => {
+            // Auth-Fehler still ignorieren — nicht als Banner anzeigen
+            if is_auth_error(&e) {
+                log::debug!("Sync Push: kein Token verfügbar, überspringe");
+                return;
+            }
             log::warn!("Sync Push fehlgeschlagen: {e}");
             app.emit("sync:status", SyncStatusEvent {
                 status: "error".into(),
@@ -72,11 +82,15 @@ pub async fn run_cycle(app: &AppHandle) {
         Ok(pulled) => {
             if pulled > 0 {
                 log::info!("Sync: {} Einträge heruntergeladen", pulled);
-                // Frontend über neue Daten informieren
                 app.emit("sync:data-updated", pulled).ok();
             }
         }
         Err(e) => {
+            // Auth-Fehler still ignorieren
+            if is_auth_error(&e) {
+                log::debug!("Sync Pull: kein Token verfügbar, überspringe");
+                return;
+            }
             log::warn!("Sync Pull fehlgeschlagen: {e}");
             app.emit("sync:status", SyncStatusEvent {
                 status: "error".into(),
@@ -92,6 +106,24 @@ pub async fn run_cycle(app: &AppHandle) {
         message: None,
         timestamp: now_ts(),
     }).ok();
+}
+
+/// Prüft ob ein Token im Store vorhanden ist (Benutzer eingeloggt)
+fn has_session(app: &AppHandle) -> bool {
+    app.store("auth.json")
+        .ok()
+        .and_then(|store| store.get("session"))
+        .and_then(|session| session.get("access_token").cloned())
+        .and_then(|t| t.as_str().map(|s| !s.is_empty()))
+        .unwrap_or(false)
+}
+
+/// Auth-Fehler: kein Token, abgelaufen, oder 401
+fn is_auth_error(e: &str) -> bool {
+    e.contains("Kein Auth-Store")
+        || e.contains("Keine aktive Session")
+        || e.contains("Kein Access-Token")
+        || e.contains("Authentifizierung abgelaufen")
 }
 
 async fn check_online() -> bool {
