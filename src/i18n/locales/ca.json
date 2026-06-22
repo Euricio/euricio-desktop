@@ -33,7 +33,9 @@
     "synced": "Sincronitzat",
     "syncing": "Sincronitzant...",
     "error": "Error de sincronització",
-    "lastSync": "Última sincronització"
+    "lastSync": "Última sincronització",
+    "justNow": "Ara mateix",
+    "pending": "pendent"
   },
   "common": {
     "yes": "Sí",
