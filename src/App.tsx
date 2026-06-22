@@ -1,56 +1,115 @@
-import { BrowserRouter, Route, Routes, Navigate } from 'react-router-dom';
-import { useEffect, useState } from 'react';
-import { listen } from '@tauri-apps/api/event';
-import { AppShell } from './components/layout/AppShell';
-import { CallPopup } from './components/calls/CallPopup';
-import { Login } from './screens/Login';
-import { Contacts } from './screens/Contacts';
-import { ContactDetail } from './screens/ContactDetail';
-import { Tasks } from './screens/Tasks';
-import { Settings } from './screens/Settings';
+import { useEffect, useState } from "react";
+import { Store } from "@tauri-apps/plugin-store";
+import { invoke } from "@tauri-apps/api/core";
+import Login from "./screens/Login";
+import AppShell from "./components/layout/AppShell";
+import "./i18n";
 
-type DeepLinkEvent = { type: string; id?: string };
+interface SessionInfo {
+  user_id: string;
+  email: string;
+  full_name?: string;
+  avatar_url?: string;
+  access_token: string;
+  expires_at: string;
+}
+
+type AppState = "loading" | "unauthenticated" | "authenticated";
 
 export default function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [appState, setAppState] = useState<AppState>("loading");
+  const [session, setSession] = useState<SessionInfo | null>(null);
 
   useEffect(() => {
-    const token = localStorage.getItem('euricio-token');
-    if (token) setIsAuthenticated(true);
+    checkSession();
   }, []);
 
-  // Deep-Link-Navigation: Fenster fokussieren und Route wechseln
-  useEffect(() => {
-    if (!isAuthenticated) return;
-    const unlisten = listen<DeepLinkEvent>('deep-link-event', (event) => {
-      const { type, id } = event.payload;
-      if (type === 'open_contact' && id) {
-        window.location.hash = `/contacts/${id}`;
-      } else if (type === 'open_task' && id) {
-        window.location.hash = `/tasks`;
-      } else if (type === 'trigger_sync') {
-        window.dispatchEvent(new CustomEvent('manual-sync'));
-      }
-    });
-    return () => { unlisten.then(fn => fn()); };
-  }, [isAuthenticated]);
+  async function checkSession() {
+    try {
+      const store = await Store.load("auth.json", { autoSave: true });
+      const stored = await store.get<SessionInfo>("session");
 
-  if (!isAuthenticated) {
-    return <Login onLogin={() => setIsAuthenticated(true)} />;
+      if (!stored?.access_token) {
+        setAppState("unauthenticated");
+        return;
+      }
+
+      // Token-Ablauf prüfen
+      const expiresAt = new Date(stored.expires_at).getTime();
+      const now = Date.now();
+      const fiveMinutes = 5 * 60 * 1000;
+
+      if (expiresAt - now < fiveMinutes) {
+        // Token fast abgelaufen — versuche zu erneuern
+        // Refresh-Token ist im Store nicht gespeichert in dieser Version
+        // → ausloggen
+        await store.delete("session");
+        setAppState("unauthenticated");
+        return;
+      }
+
+      setSession(stored);
+      setAppState("authenticated");
+    } catch {
+      setAppState("unauthenticated");
+    }
+  }
+
+  async function handleLoginSuccess(newSession: SessionInfo) {
+    setSession(newSession);
+    setAppState("authenticated");
+  }
+
+  async function handleLogout() {
+    try {
+      await invoke("logout");
+      const store = await Store.load("auth.json", { autoSave: true });
+      await store.delete("session");
+    } catch {
+      // ignore
+    }
+    setSession(null);
+    setAppState("unauthenticated");
+  }
+
+  if (appState === "loading") {
+    return (
+      <div style={splashStyle}>
+        <div style={logoStyle}>E</div>
+      </div>
+    );
+  }
+
+  if (appState === "unauthenticated") {
+    return <Login onSuccess={handleLoginSuccess} />;
   }
 
   return (
-    <BrowserRouter>
-      <AppShell>
-        <Routes>
-          <Route path="/" element={<Navigate to="/contacts" replace />} />
-          <Route path="/contacts" element={<Contacts />} />
-          <Route path="/contacts/:id" element={<ContactDetail />} />
-          <Route path="/tasks" element={<Tasks />} />
-          <Route path="/settings" element={<Settings />} />
-        </Routes>
-      </AppShell>
-      <CallPopup />
-    </BrowserRouter>
+    <AppShell
+      session={session!}
+      onLogout={handleLogout}
+    />
   );
 }
+
+const splashStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  minHeight: "100vh",
+  background: "linear-gradient(135deg, #0a1628 0%, #1a2f4e 100%)",
+};
+
+const logoStyle: React.CSSProperties = {
+  width: "64px",
+  height: "64px",
+  background: "linear-gradient(135deg, #005ab4, #0080ff)",
+  borderRadius: "16px",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  color: "white",
+  fontWeight: "700",
+  fontSize: "32px",
+  animation: "pulse 1.5s ease-in-out infinite",
+};
