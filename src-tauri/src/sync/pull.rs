@@ -1,10 +1,8 @@
 use serde::{Deserialize, Serialize};
-use tauri::AppHandle;
+use tauri::{AppHandle, Emitter};
 use tauri_plugin_store::StoreExt;
 
 const API_BASE: &str = "https://euricio-crm.fly.dev/api/v2";
-
-// ── API-Typen (spiegeln Elixir-Backend) ──────────────────────────────────────
 
 #[derive(Debug, Deserialize)]
 struct PullResponse<T> {
@@ -47,8 +45,6 @@ pub struct RemoteTask {
     pub updated_at: Option<String>,
 }
 
-// ── Haupt-Pull-Funktion ───────────────────────────────────────────────────────
-
 /// Holt alle Änderungen seit dem letzten Cursor vom Backend.
 /// Gibt die Anzahl der verarbeiteten Datensätze zurück.
 pub async fn pull_changes(app: &AppHandle) -> Result<usize, String> {
@@ -61,21 +57,19 @@ pub async fn pull_changes(app: &AppHandle) -> Result<usize, String> {
 
     let mut total = 0;
 
-    // Contacts pullen
-    total += pull_entity::<RemoteContact>(
-        &client,
-        &token,
-        "contacts",
-        app,
-    ).await?;
+    total += pull_entity::<RemoteContact>(&client, &token, "contacts", app).await?;
+    total += pull_entity::<RemoteTask>(&client, &token, "tasks", app).await?;
 
-    // Tasks pullen
-    total += pull_entity::<RemoteTask>(
-        &client,
-        &token,
-        "tasks",
-        app,
-    ).await?;
+    // Letzten Sync-Zeitstempel speichern
+    if let Ok(store) = app.store("sync_cursors.json") {
+        store.set(
+            "last_synced_at",
+            serde_json::Value::Number(
+                chrono::Utc::now().timestamp().into(),
+            ),
+        );
+        let _ = store.save();
+    }
 
     Ok(total)
 }
@@ -92,12 +86,10 @@ async fn pull_entity<T: for<'de> Deserialize<'de> + Serialize>(
     let mut has_more = true;
 
     while has_more {
-        let mut url = format!("{}/{}", API_BASE, entity);
-        if let Some(ref c) = current_cursor {
-            url = format!("{}?cursor={}&limit=100", url, c);
-        } else {
-            url = format!("{}?limit=100", url);
-        }
+        let url = match &current_cursor {
+            Some(c) => format!("{}/{}?cursor={}&limit=100", API_BASE, entity, c),
+            None    => format!("{}/{}?limit=100", API_BASE, entity),
+        };
 
         let resp = client
             .get(&url)
@@ -112,15 +104,12 @@ async fn pull_entity<T: for<'de> Deserialize<'de> + Serialize>(
         }
 
         if !resp.status().is_success() {
-            // Backend noch nicht bereit — kein Fehler, nur überspringen
             log::debug!("Pull {}: Status {} — überspringe", entity, resp.status());
             return Ok(0);
         }
 
-        // Versuche strukturiertes JSON zu parsen, fallback auf leere Liste
         let text = resp.text().await.map_err(|e| e.to_string())?;
 
-        // Backend kann entweder PullResponse oder direkt Vec zurückgeben
         let (items, next_cursor, more): (Vec<serde_json::Value>, Option<String>, bool) =
             if let Ok(pr) = serde_json::from_str::<PullResponse<serde_json::Value>>(&text) {
                 (pr.data, pr.cursor, pr.has_more)
@@ -133,7 +122,6 @@ async fn pull_entity<T: for<'de> Deserialize<'de> + Serialize>(
 
         count += items.len();
 
-        // Cursor speichern
         if let Some(ref nc) = next_cursor {
             save_cursor(app, entity, nc);
             current_cursor = Some(nc.clone());
@@ -141,8 +129,6 @@ async fn pull_entity<T: for<'de> Deserialize<'de> + Serialize>(
 
         has_more = more && next_cursor.is_some();
 
-        // Items in DB schreiben — via Event ans Frontend senden
-        // (Frontend nutzt tauri-plugin-sql direkt für SQLite-Writes)
         if !items.is_empty() {
             app.emit(&format!("sync:pull:{}", entity), &items)
                 .map_err(|e| e.to_string())?;
@@ -152,12 +138,9 @@ async fn pull_entity<T: for<'de> Deserialize<'de> + Serialize>(
     Ok(count)
 }
 
-// ── Cursor-Verwaltung ─────────────────────────────────────────────────────────
-
 fn get_cursor(app: &AppHandle, entity: &str) -> Option<String> {
     let store = app.store("sync_cursors.json").ok()?;
-    store.get(entity)
-        .and_then(|v| v.as_str().map(String::from))
+    store.get(entity).and_then(|v| v.as_str().map(String::from))
 }
 
 fn save_cursor(app: &AppHandle, entity: &str, cursor: &str) {
@@ -168,10 +151,12 @@ fn save_cursor(app: &AppHandle, entity: &str, cursor: &str) {
 }
 
 fn get_access_token(app: &AppHandle) -> Result<String, String> {
-    let store = app.store("auth.json")
+    let store = app
+        .store("auth.json")
         .map_err(|_| "Kein Auth-Store gefunden".to_string())?;
 
-    let session = store.get("session")
+    let session = store
+        .get("session")
         .ok_or_else(|| "Keine aktive Session".to_string())?;
 
     session
