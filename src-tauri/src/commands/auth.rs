@@ -1,6 +1,4 @@
 use serde::{Deserialize, Serialize};
-use tauri::State;
-use tauri_plugin_sql::{DbPool, DbInstances};
 
 const SUPABASE_URL: &str = "https://vddfghfvmnrbotmxhvvi.supabase.co";
 const SUPABASE_ANON_KEY: &str = "sb_publishable_xHQlpSPtA0H75GuESG3o7A_A3evq_vv";
@@ -14,6 +12,7 @@ pub struct SessionInfo {
     pub full_name: Option<String>,
     pub avatar_url: Option<String>,
     pub access_token: String,
+    pub refresh_token: String,
     pub expires_at: String,
 }
 
@@ -30,17 +29,6 @@ struct SupabaseUser {
     id: String,
     email: Option<String>,
     user_metadata: Option<serde_json::Value>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct DbSession {
-    user_id: String,
-    email: String,
-    full_name: Option<String>,
-    avatar_url: Option<String>,
-    access_token: String,
-    refresh_token: String,
-    expires_at: String,
 }
 
 // ── Tauri Commands ────────────────────────────────────────────────────────────
@@ -95,30 +83,11 @@ pub async fn login(email: String, password: String) -> Result<SessionInfo, Strin
         .and_then(|v| v.as_str())
         .map(String::from);
 
-    let email_str = auth
-        .user
-        .email
-        .clone()
-        .unwrap_or_else(|| email.clone());
+    let email_str = auth.user.email.clone().unwrap_or_else(|| email.clone());
 
-    // Ablaufzeit berechnen
     let expires_at = chrono::Utc::now()
         + chrono::Duration::seconds(auth.expires_in as i64);
     let expires_at_str = expires_at.format("%Y-%m-%dT%H:%M:%SZ").to_string();
-
-    let session = DbSession {
-        user_id: auth.user.id.clone(),
-        email: email_str.clone(),
-        full_name: full_name.clone(),
-        avatar_url: avatar_url.clone(),
-        access_token: auth.access_token.clone(),
-        refresh_token: auth.refresh_token.clone(),
-        expires_at: expires_at_str.clone(),
-    };
-
-    // Session in auth.db speichern (via store — wir nutzen tauri-plugin-store
-    // als einfacheren Weg, da SQL-Zugriff in Commands komplex ist)
-    // Die Session wird im Frontend über invoke gespeichert.
 
     Ok(SessionInfo {
         user_id: auth.user.id,
@@ -126,19 +95,18 @@ pub async fn login(email: String, password: String) -> Result<SessionInfo, Strin
         full_name,
         avatar_url,
         access_token: auth.access_token,
+        refresh_token: auth.refresh_token,
         expires_at: expires_at_str,
     })
 }
 
 #[tauri::command]
 pub async fn logout() -> Result<(), String> {
-    // Token invalidieren (fire and forget)
     Ok(())
 }
 
 #[tauri::command]
 pub async fn get_session() -> Result<Option<SessionInfo>, String> {
-    // Wird vom Frontend aus dem Store gelesen
     Ok(None)
 }
 
@@ -194,6 +162,7 @@ pub async fn refresh_token(refresh_token: String) -> Result<SessionInfo, String>
         full_name,
         avatar_url,
         access_token: auth.access_token,
+        refresh_token: auth.refresh_token,
         expires_at: expires_at_str,
     })
 }
