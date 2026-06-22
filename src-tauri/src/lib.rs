@@ -63,6 +63,7 @@ pub fn run() {
             commands::contacts::upsert_contact,
             commands::sync::trigger_sync,
             commands::sync::get_sync_status,
+            commands::sync::reset_sync_cursors,
             commands::calls::resolve_phone,
         ])
         .run(tauri::generate_context!())
