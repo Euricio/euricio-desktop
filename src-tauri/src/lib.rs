@@ -65,6 +65,7 @@ pub fn run() {
             commands::sync::get_sync_status,
             commands::sync::reset_sync_cursors,
             commands::calls::resolve_phone,
+            commands::calls::simulate_incoming_call,
         ])
         .run(tauri::generate_context!())
         .expect("Euricio Desktop konnte nicht gestartet werden");
