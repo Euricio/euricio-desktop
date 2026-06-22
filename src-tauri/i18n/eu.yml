@@ -1,0 +1,13 @@
+tray:
+  open: "CRM ireki"
+  sync: "Sinkronizatu"
+  quit: "Irten"
+  incoming_call: "Sarrerako deia"
+
+notifications:
+  incoming_call: "%{name}(r)en deia"
+  sync_done: "Sinkronizazioa osatua"
+  conflict_detected: "Gatazka %{entity}(e)n"
+
+app:
+  name: "Euricio CRM"
