@@ -9,18 +9,23 @@
     "core:default",
     "core:event:default",
     "core:window:default",
+    "core:tray:default",
+    "sql:default",
     "sql:allow-execute",
     "sql:allow-select",
     "sql:allow-close",
     "sql:allow-load",
+    "store:default",
     "store:allow-load",
     "store:allow-get",
     "store:allow-set",
     "store:allow-save",
     "store:allow-delete",
     "store:allow-clear",
+    "store:allow-entries",
+    "store:allow-keys",
+    "store:allow-has",
     "notification:default",
-    "deep-link:default",
-    "single-instance:default"
+    "deep-link:default"
   ]
 }
