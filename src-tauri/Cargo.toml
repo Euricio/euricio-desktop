@@ -8,6 +8,10 @@ repository = "https://github.com/Euricio/euricio-desktop"
 edition = "2021"
 rust-version = "1.77.2"
 
+[[bin]]
+name = "euricio-desktop"
+path = "src/main.rs"
+
 [lib]
 name = "euricio_desktop_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
