@@ -33,7 +33,9 @@
     "synced": "Synchronisiert",
     "syncing": "Synchronisiere...",
     "error": "Sync-Fehler",
-    "lastSync": "Zuletzt synchronisiert"
+    "lastSync": "Zuletzt synchronisiert",
+    "justNow": "Gerade eben",
+    "pending": "ausstehend"
   },
   "common": {
     "yes": "Ja",
