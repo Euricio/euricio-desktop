@@ -45,7 +45,7 @@ pub fn run() {
             let handle2 = app.handle().clone();
             app.listen("deep-link://new-url", move |event| {
                 let payload = event.payload();
-                let url_str = payload.trim_matches('"'');
+                let url_str = payload.trim_matches('"');
                 if let Ok(url) = url::Url::parse(url_str) {
                     deep_link::handle_url(&handle2, url);
                 }
