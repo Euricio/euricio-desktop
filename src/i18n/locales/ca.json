@@ -1,0 +1,81 @@
+{
+  "app": {
+    "navigation": {
+      "contacts": "Contactes",
+      "tasks": "Tasques",
+      "properties": "Immobles",
+      "activities": "Activitats",
+      "settings": "Configuració"
+    },
+    "sync": {
+      "status": {
+        "synced": "Sincronitzat",
+        "pending": "Sincronització pendent",
+        "offline": "Sense connexió",
+        "error": "Error de sincronització",
+        "in_progress": "Sincronitzant..."
+      },
+      "action": {
+        "sync_now": "Sincronitza ara"
+      },
+      "last_synced": "Última sincronització: {{time}}"
+    },
+    "calls": {
+      "incoming": "Trucada entrant",
+      "unknown_number": "Número desconegut",
+      "contact_found": "Contacte trobat",
+      "create_contact": "Nou contacte",
+      "create_lead": "Nou lead",
+      "open": "Veure"
+    },
+    "contacts": {
+      "list_empty": "Sense contactes",
+      "search_placeholder": "Cerca contacte...",
+      "phone": "Telèfon",
+      "email": "Correu",
+      "company": "Empresa",
+      "notes": "Notes",
+      "created_at": "Creat el",
+      "open": "Veure contacte"
+    },
+    "tasks": {
+      "list_empty": "Sense tasques",
+      "priority": {
+        "high": "Alta",
+        "medium": "Mitjana",
+        "low": "Baixa"
+      },
+      "status": {
+        "open": "Oberta",
+        "done": "Completada"
+      }
+    },
+    "errors": {
+      "network": "Error de xarxa",
+      "auth_expired": "Sessió caducada",
+      "sync_failed": "Error en sincronitzar",
+      "conflict": "Conflicte detectat",
+      "login_failed": "Error en iniciar sessió"
+    },
+    "settings": {
+      "language": "Idioma",
+      "sync_interval": "Interval de sincronització",
+      "notifications": "Notificacions"
+    },
+    "common": {
+      "dismiss": "Tancar",
+      "save": "Desar",
+      "cancel": "Cancel·lar",
+      "loading": "Carregant...",
+      "error": "Error"
+    }
+  },
+  "auth": {
+    "login": "Iniciar sessió",
+    "logout": "Tancar sessió",
+    "email": "Adreça de correu",
+    "password": "Contrasenya",
+    "login_button": "Entrar",
+    "logging_in": "Entrant..."
+  }
+}
