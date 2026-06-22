@@ -1,5 +1,6 @@
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, Listener};
+use tauri_plugin_store::StoreExt;
 use tokio::time;
 
 const SYNC_INTERVAL_SECS: u64 = 30;
