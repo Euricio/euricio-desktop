@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter};
+use serde::Deserialize;
+use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_store::StoreExt;
 
 const API_BASE: &str = "https://euricio-crm.fly.dev/api/v2";
