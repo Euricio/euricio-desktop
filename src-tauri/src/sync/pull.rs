@@ -5,48 +5,13 @@ use tauri_plugin_store::StoreExt;
 const API_BASE: &str = "https://euricio-crm.fly.dev/api/v2";
 
 #[derive(Debug, Deserialize)]
-struct PullResponse<T> {
-    data: Vec<T>,
+struct PullResponse {
+    data: Vec<serde_json::Value>,
     cursor: Option<String>,
     has_more: bool,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
-pub struct RemoteContact {
-    pub id: String,
-    pub first_name: Option<String>,
-    pub last_name: Option<String>,
-    pub email: Option<String>,
-    pub phone: Option<String>,
-    pub mobile: Option<String>,
-    pub company: Option<String>,
-    pub address: Option<String>,
-    pub city: Option<String>,
-    pub country: Option<String>,
-    pub notes: Option<String>,
-    pub avatar_url: Option<String>,
-    pub tags: Option<serde_json::Value>,
-    pub status: Option<String>,
-    pub inserted_at: Option<String>,
-    pub updated_at: Option<String>,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct RemoteTask {
-    pub id: String,
-    pub title: String,
-    pub description: Option<String>,
-    pub due_date: Option<String>,
-    pub priority: Option<String>,
-    pub status: Option<String>,
-    pub contact_id: Option<String>,
-    pub assigned_to: Option<String>,
-    pub inserted_at: Option<String>,
-    pub updated_at: Option<String>,
-}
-
-/// Holt alle Änderungen seit dem letzten Cursor vom Backend.
-/// Gibt die Anzahl der verarbeiteten Datensätze zurück.
+/// Holt alle Änderungen seit dem letzten Cursor vom Backend und speichert sie in SQLite.
 pub async fn pull_changes(app: &AppHandle) -> Result<usize, String> {
     let token = get_access_token(app)?;
 
@@ -55,18 +20,16 @@ pub async fn pull_changes(app: &AppHandle) -> Result<usize, String> {
         .build()
         .map_err(|e| e.to_string())?;
 
+    let db_path = get_db_path(app)?;
     let mut total = 0;
 
-    total += pull_entity::<RemoteContact>(&client, &token, "contacts", app).await?;
-    total += pull_entity::<RemoteTask>(&client, &token, "tasks", app).await?;
+    total += pull_contacts(&client, &token, app, &db_path).await?;
+    total += pull_tasks(&client, &token, app, &db_path).await?;
 
-    // Letzten Sync-Zeitstempel speichern
     if let Ok(store) = app.store("sync_cursors.json") {
         store.set(
             "last_synced_at",
-            serde_json::Value::Number(
-                chrono::Utc::now().timestamp().into(),
-            ),
+            serde_json::Value::Number(chrono::Utc::now().timestamp().into()),
         );
         let _ = store.save();
     }
@@ -74,68 +37,231 @@ pub async fn pull_changes(app: &AppHandle) -> Result<usize, String> {
     Ok(total)
 }
 
-async fn pull_entity<T: for<'de> Deserialize<'de> + Serialize>(
+async fn pull_contacts(
     client: &reqwest::Client,
     token: &str,
-    entity: &str,
     app: &AppHandle,
+    db_path: &str,
 ) -> Result<usize, String> {
-    let cursor = get_cursor(app, entity);
-    let mut count = 0;
-    let mut current_cursor = cursor;
-    let mut has_more = true;
+    let cursor = get_cursor(app, "contacts");
+    let url = match &cursor {
+        Some(c) => format!("{}/contacts?cursor={}&limit=100", API_BASE, c),
+        None => format!("{}/contacts?limit=100", API_BASE),
+    };
 
-    while has_more {
-        let url = match &current_cursor {
-            Some(c) => format!("{}/{}?cursor={}&limit=100", API_BASE, entity, c),
-            None    => format!("{}/{}?limit=100", API_BASE, entity),
-        };
+    let resp = client
+        .get(&url)
+        .bearer_auth(token)
+        .header("Accept", "application/json")
+        .send()
+        .await
+        .map_err(|e| format!("Netzwerkfehler (contacts): {}", e))?;
 
-        let resp = client
-            .get(&url)
-            .bearer_auth(token)
-            .header("Accept", "application/json")
-            .send()
-            .await
-            .map_err(|e| format!("Netzwerkfehler beim Pull von {}: {}", entity, e))?;
+    if resp.status().as_u16() == 401 {
+        return Err("Authentifizierung abgelaufen. Bitte neu anmelden.".into());
+    }
+    if !resp.status().is_success() {
+        log::warn!("Pull contacts: HTTP {} — überspringe", resp.status().as_u16());
+        return Ok(0);
+    }
 
-        if resp.status().as_u16() == 401 {
-            return Err("Authentifizierung abgelaufen. Bitte neu anmelden.".into());
+    let text = resp.text().await.map_err(|e| e.to_string())?;
+    let (items, next_cursor) = parse_response(&text, "contacts");
+    let count = items.len();
+
+    if count > 0 {
+        upsert_contacts_sqlite(&items, db_path)?;
+        if let Some(nc) = next_cursor {
+            save_cursor(app, "contacts", &nc);
         }
-
-        if !resp.status().is_success() {
-            log::debug!("Pull {}: Status {} — überspringe", entity, resp.status());
-            return Ok(0);
-        }
-
-        let text = resp.text().await.map_err(|e| e.to_string())?;
-
-        let (items, next_cursor, more): (Vec<serde_json::Value>, Option<String>, bool) =
-            if let Ok(pr) = serde_json::from_str::<PullResponse<serde_json::Value>>(&text) {
-                (pr.data, pr.cursor, pr.has_more)
-            } else if let Ok(items) = serde_json::from_str::<Vec<serde_json::Value>>(&text) {
-                (items, None, false)
-            } else {
-                log::debug!("Pull {}: Unbekanntes Format — überspringe", entity);
-                return Ok(0);
-            };
-
-        count += items.len();
-
-        if let Some(ref nc) = next_cursor {
-            save_cursor(app, entity, nc);
-            current_cursor = Some(nc.clone());
-        }
-
-        has_more = more && next_cursor.is_some();
-
-        if !items.is_empty() {
-            app.emit(&format!("sync:pull:{}", entity), &items)
-                .map_err(|e| e.to_string())?;
-        }
+        app.emit("sync:data-updated", count).ok();
+        log::info!("Sync: {} Kontakte gespeichert", count);
     }
 
     Ok(count)
+}
+
+async fn pull_tasks(
+    client: &reqwest::Client,
+    token: &str,
+    app: &AppHandle,
+    db_path: &str,
+) -> Result<usize, String> {
+    let cursor = get_cursor(app, "tasks");
+    let url = match &cursor {
+        Some(c) => format!("{}/tasks?cursor={}&limit=100", API_BASE, c),
+        None => format!("{}/tasks?limit=100", API_BASE),
+    };
+
+    let resp = client
+        .get(&url)
+        .bearer_auth(token)
+        .header("Accept", "application/json")
+        .send()
+        .await
+        .map_err(|e| format!("Netzwerkfehler (tasks): {}", e))?;
+
+    if resp.status().as_u16() == 401 {
+        return Err("Authentifizierung abgelaufen. Bitte neu anmelden.".into());
+    }
+    if !resp.status().is_success() {
+        log::warn!("Pull tasks: HTTP {} — überspringe", resp.status().as_u16());
+        return Ok(0);
+    }
+
+    let text = resp.text().await.map_err(|e| e.to_string())?;
+    let (items, next_cursor) = parse_response(&text, "tasks");
+    let count = items.len();
+
+    if count > 0 {
+        upsert_tasks_sqlite(&items, db_path)?;
+        if let Some(nc) = next_cursor {
+            save_cursor(app, "tasks", &nc);
+        }
+        app.emit("sync:data-updated", count).ok();
+        log::info!("Sync: {} Tasks gespeichert", count);
+    }
+
+    Ok(count)
+}
+
+fn parse_response(text: &str, entity: &str) -> (Vec<serde_json::Value>, Option<String>) {
+    if let Ok(pr) = serde_json::from_str::<PullResponse>(text) {
+        (pr.data, pr.cursor)
+    } else if let Ok(items) = serde_json::from_str::<Vec<serde_json::Value>>(text) {
+        (items, None)
+    } else {
+        log::warn!(
+            "Pull {}: Unbekanntes Format: {}",
+            entity,
+            &text[..text.len().min(300)]
+        );
+        (vec![], None)
+    }
+}
+
+fn upsert_contacts_sqlite(items: &[serde_json::Value], db_path: &str) -> Result<(), String> {
+    let conn = rusqlite::Connection::open(db_path)
+        .map_err(|e| format!("DB öffnen fehlgeschlagen: {}", e))?;
+
+    for item in items {
+        let id = str_val(item, "id");
+        if id.is_empty() {
+            continue;
+        }
+
+        conn.execute(
+            "INSERT INTO contacts (
+                id, first_name, last_name, email, phone, mobile,
+                company, address, city, country, notes, avatar_url,
+                status, synced, updated_at, inserted_at
+             ) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,1,?14,?15)
+             ON CONFLICT(id) DO UPDATE SET
+               first_name  = excluded.first_name,
+               last_name   = excluded.last_name,
+               email       = excluded.email,
+               phone       = excluded.phone,
+               mobile      = excluded.mobile,
+               company     = excluded.company,
+               address     = excluded.address,
+               city        = excluded.city,
+               country     = excluded.country,
+               notes       = excluded.notes,
+               avatar_url  = excluded.avatar_url,
+               status      = excluded.status,
+               synced      = 1,
+               updated_at  = excluded.updated_at",
+            rusqlite::params![
+                id,
+                str_val(item, "first_name"),
+                opt_str(item, "last_name"),
+                opt_str(item, "email"),
+                opt_str(item, "phone"),
+                opt_str(item, "mobile"),
+                opt_str(item, "company"),
+                opt_str(item, "address"),
+                opt_str(item, "city"),
+                opt_str(item, "country"),
+                opt_str(item, "notes"),
+                opt_str(item, "avatar_url"),
+                opt_str(item, "status").unwrap_or_else(|| "new".into()),
+                opt_str(item, "updated_at")
+                    .unwrap_or_else(|| chrono::Utc::now().to_rfc3339()),
+                opt_str(item, "inserted_at")
+                    .unwrap_or_else(|| chrono::Utc::now().to_rfc3339()),
+            ],
+        )
+        .map_err(|e| format!("Upsert contact {} fehlgeschlagen: {}", id, e))?;
+    }
+
+    Ok(())
+}
+
+fn upsert_tasks_sqlite(items: &[serde_json::Value], db_path: &str) -> Result<(), String> {
+    let conn = rusqlite::Connection::open(db_path)
+        .map_err(|e| format!("DB öffnen fehlgeschlagen: {}", e))?;
+
+    for item in items {
+        let id = str_val(item, "id");
+        if id.is_empty() {
+            continue;
+        }
+
+        conn.execute(
+            "INSERT INTO tasks (
+                id, title, description, due_date, priority,
+                status, contact_id, assigned_to, synced, updated_at, inserted_at
+             ) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,1,?9,?10)
+             ON CONFLICT(id) DO UPDATE SET
+               title       = excluded.title,
+               description = excluded.description,
+               due_date    = excluded.due_date,
+               priority    = excluded.priority,
+               status      = excluded.status,
+               contact_id  = excluded.contact_id,
+               assigned_to = excluded.assigned_to,
+               synced      = 1,
+               updated_at  = excluded.updated_at",
+            rusqlite::params![
+                id,
+                str_val(item, "title"),
+                opt_str(item, "description"),
+                opt_str(item, "due_date"),
+                opt_str(item, "priority").unwrap_or_else(|| "medium".into()),
+                opt_str(item, "status").unwrap_or_else(|| "open".into()),
+                opt_str(item, "contact_id"),
+                opt_str(item, "assigned_to"),
+                opt_str(item, "updated_at")
+                    .unwrap_or_else(|| chrono::Utc::now().to_rfc3339()),
+                opt_str(item, "inserted_at")
+                    .unwrap_or_else(|| chrono::Utc::now().to_rfc3339()),
+            ],
+        )
+        .map_err(|e| format!("Upsert task {} fehlgeschlagen: {}", id, e))?;
+    }
+
+    Ok(())
+}
+
+// ── Hilfsfunktionen ───────────────────────────────────────────────────────────
+
+fn get_db_path(app: &AppHandle) -> Result<String, String> {
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("App-Pfad nicht gefunden: {}", e))?;
+    Ok(dir.join("crm.db").to_string_lossy().into_owned())
+}
+
+fn str_val(v: &serde_json::Value, key: &str) -> String {
+    v.get(key)
+        .and_then(|x| x.as_str())
+        .unwrap_or("")
+        .to_string()
+}
+
+fn opt_str(v: &serde_json::Value, key: &str) -> Option<String> {
+    v.get(key).and_then(|x| x.as_str()).map(String::from)
 }
 
 fn get_cursor(app: &AppHandle, entity: &str) -> Option<String> {
