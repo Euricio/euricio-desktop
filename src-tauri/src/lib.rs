@@ -380,6 +380,30 @@ fn get_personal_stats(db_path: String) -> Result<Vec<serde_json::Value>, String>
     result.map_err(|e| e.to_string())
 }
 
+/// Open a URL or tel:// link via the system default handler
+#[tauri::command]
+fn open_url(url: String) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    std::process::Command::new("xdg-open")
+        .arg(&url)
+        .spawn()
+        .map_err(|e| e.to_string())?;
+
+    #[cfg(target_os = "macos")]
+    std::process::Command::new("open")
+        .arg(&url)
+        .spawn()
+        .map_err(|e| e.to_string())?;
+
+    #[cfg(target_os = "windows")]
+    std::process::Command::new("cmd")
+        .args(["/c", "start", "", &url])
+        .spawn()
+        .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
 /// Property stats for report
 #[tauri::command]
 fn get_property_stats(db_path: String) -> Result<serde_json::Value, String> {
@@ -456,6 +480,8 @@ pub fn run() {
             get_time_entries,
             get_vacation_requests,
             insert_vacation_request,
+            // System
+            open_url,
             // Report commands
             get_sales_stats,
             get_activity_stats,
