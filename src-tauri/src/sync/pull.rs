@@ -11,20 +11,25 @@ struct PullResponse {
     has_more: bool,
 }
 
-/// Holt alle Änderungen seit dem letzten Cursor vom Backend und speichert sie in SQLite.
+/// Holt alle Änderungen vom Backend und speichert sie in SQLite.
 pub async fn pull_changes(app: &AppHandle) -> Result<usize, String> {
     let token = get_access_token(app)?;
-
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(30))
-        .build()
-        .map_err(|e| e.to_string())?;
-
     let db_path = get_db_path(app)?;
     let mut total = 0;
 
-    total += pull_contacts(&client, &token, app, &db_path).await?;
-    total += pull_tasks(&client, &token, app, &db_path).await?;
+    total += tokio::task::spawn_blocking({
+        let token = token.clone();
+        let db_path = db_path.clone();
+        let app = app.clone();
+        move || pull_entity("contacts", &token, &app, &db_path)
+    }).await.map_err(|e| e.to_string())??;
+
+    total += tokio::task::spawn_blocking({
+        let token = token.clone();
+        let db_path = db_path.clone();
+        let app = app.clone();
+        move || pull_entity("tasks", &token, &app, &db_path)
+    }).await.map_err(|e| e.to_string())??;
 
     if let Ok(store) = app.store("sync_cursors.json") {
         store.set(
@@ -34,92 +39,65 @@ pub async fn pull_changes(app: &AppHandle) -> Result<usize, String> {
         let _ = store.save();
     }
 
+    if total > 0 {
+        app.emit("sync:data-updated", total).ok();
+    }
+
     Ok(total)
 }
 
-async fn pull_contacts(
-    client: &reqwest::Client,
+/// Nutzt curl (via std::process::Command) um TLS-Probleme mit rustls zu umgehen.
+fn pull_entity(
+    entity: &str,
     token: &str,
     app: &AppHandle,
     db_path: &str,
 ) -> Result<usize, String> {
-    let cursor = get_cursor(app, "contacts");
+    let cursor = get_cursor(app, entity);
     let url = match &cursor {
-        Some(c) => format!("{}/contacts?cursor={}&limit=100", API_BASE, c),
-        None => format!("{}/contacts?limit=100", API_BASE),
+        Some(c) => format!("{}/{}?cursor={}&limit=100", API_BASE, entity, c),
+        None    => format!("{}/{}?limit=100", API_BASE, entity),
     };
 
-    let resp = client
-        .get(&url)
-        .bearer_auth(token)
-        .header("Accept", "application/json")
-        .send()
-        .await
-        .map_err(|e| format!("Netzwerkfehler (contacts): {}", e))?;
+    // curl nutzen — funktioniert nachweislich auf diesem System
+    let output = std::process::Command::new("curl")
+        .args([
+            "-s",
+            "-f",                         // fail on HTTP error
+            "--max-time", "30",
+            "-H", &format!("Authorization: Bearer {}", token),
+            "-H", "Accept: application/json",
+            &url,
+        ])
+        .output()
+        .map_err(|e| format!("curl nicht gefunden: {}", e))?;
 
-    if resp.status().as_u16() == 401 {
-        return Err("Authentifizierung abgelaufen. Bitte neu anmelden.".into());
-    }
-    if !resp.status().is_success() {
-        log::warn!("Pull contacts: HTTP {} — überspringe", resp.status().as_u16());
+    if !output.status.success() {
+        let exit = output.status.code().unwrap_or(-1);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        // Exit code 22 = HTTP error (401/403/404 etc.)
+        if exit == 22 {
+            return Err("Authentifizierung abgelaufen. Bitte neu anmelden.".into());
+        }
+        log::warn!("Pull {} curl exit {}: {}", entity, exit, stderr);
         return Ok(0);
     }
 
-    let text = resp.text().await.map_err(|e| e.to_string())?;
-    let (items, next_cursor) = parse_response(&text, "contacts");
+    let text = String::from_utf8_lossy(&output.stdout);
+
+    let (items, next_cursor) = parse_response(&text, entity);
     let count = items.len();
 
     if count > 0 {
-        upsert_contacts_sqlite(&items, db_path)?;
-        if let Some(nc) = next_cursor {
-            save_cursor(app, "contacts", &nc);
+        match entity {
+            "contacts" => upsert_contacts(&items, db_path)?,
+            "tasks"    => upsert_tasks(&items, db_path)?,
+            _          => {}
         }
-        app.emit("sync:data-updated", count).ok();
-        log::info!("Sync: {} Kontakte gespeichert", count);
-    }
-
-    Ok(count)
-}
-
-async fn pull_tasks(
-    client: &reqwest::Client,
-    token: &str,
-    app: &AppHandle,
-    db_path: &str,
-) -> Result<usize, String> {
-    let cursor = get_cursor(app, "tasks");
-    let url = match &cursor {
-        Some(c) => format!("{}/tasks?cursor={}&limit=100", API_BASE, c),
-        None => format!("{}/tasks?limit=100", API_BASE),
-    };
-
-    let resp = client
-        .get(&url)
-        .bearer_auth(token)
-        .header("Accept", "application/json")
-        .send()
-        .await
-        .map_err(|e| format!("Netzwerkfehler (tasks): {}", e))?;
-
-    if resp.status().as_u16() == 401 {
-        return Err("Authentifizierung abgelaufen. Bitte neu anmelden.".into());
-    }
-    if !resp.status().is_success() {
-        log::warn!("Pull tasks: HTTP {} — überspringe", resp.status().as_u16());
-        return Ok(0);
-    }
-
-    let text = resp.text().await.map_err(|e| e.to_string())?;
-    let (items, next_cursor) = parse_response(&text, "tasks");
-    let count = items.len();
-
-    if count > 0 {
-        upsert_tasks_sqlite(&items, db_path)?;
         if let Some(nc) = next_cursor {
-            save_cursor(app, "tasks", &nc);
+            save_cursor(app, entity, &nc);
         }
-        app.emit("sync:data-updated", count).ok();
-        log::info!("Sync: {} Tasks gespeichert", count);
+        log::info!("Sync: {} {} gespeichert", count, entity);
     }
 
     Ok(count)
@@ -140,15 +118,13 @@ fn parse_response(text: &str, entity: &str) -> (Vec<serde_json::Value>, Option<S
     }
 }
 
-fn upsert_contacts_sqlite(items: &[serde_json::Value], db_path: &str) -> Result<(), String> {
+fn upsert_contacts(items: &[serde_json::Value], db_path: &str) -> Result<(), String> {
     let conn = rusqlite::Connection::open(db_path)
         .map_err(|e| format!("DB öffnen fehlgeschlagen: {}", e))?;
 
     for item in items {
         let id = str_val(item, "id");
-        if id.is_empty() {
-            continue;
-        }
+        if id.is_empty() { continue; }
 
         conn.execute(
             "INSERT INTO contacts (
@@ -185,27 +161,21 @@ fn upsert_contacts_sqlite(items: &[serde_json::Value], db_path: &str) -> Result<
                 opt_str(item, "notes"),
                 opt_str(item, "avatar_url"),
                 opt_str(item, "status").unwrap_or_else(|| "new".into()),
-                opt_str(item, "updated_at")
-                    .unwrap_or_else(|| chrono::Utc::now().to_rfc3339()),
-                opt_str(item, "inserted_at")
-                    .unwrap_or_else(|| chrono::Utc::now().to_rfc3339()),
+                opt_str(item, "updated_at").unwrap_or_else(|| chrono::Utc::now().to_rfc3339()),
+                opt_str(item, "inserted_at").unwrap_or_else(|| chrono::Utc::now().to_rfc3339()),
             ],
-        )
-        .map_err(|e| format!("Upsert contact {} fehlgeschlagen: {}", id, e))?;
+        ).map_err(|e| format!("Upsert contact {} fehlgeschlagen: {}", id, e))?;
     }
-
     Ok(())
 }
 
-fn upsert_tasks_sqlite(items: &[serde_json::Value], db_path: &str) -> Result<(), String> {
+fn upsert_tasks(items: &[serde_json::Value], db_path: &str) -> Result<(), String> {
     let conn = rusqlite::Connection::open(db_path)
         .map_err(|e| format!("DB öffnen fehlgeschlagen: {}", e))?;
 
     for item in items {
         let id = str_val(item, "id");
-        if id.is_empty() {
-            continue;
-        }
+        if id.is_empty() { continue; }
 
         conn.execute(
             "INSERT INTO tasks (
@@ -231,15 +201,11 @@ fn upsert_tasks_sqlite(items: &[serde_json::Value], db_path: &str) -> Result<(),
                 opt_str(item, "status").unwrap_or_else(|| "open".into()),
                 opt_str(item, "contact_id"),
                 opt_str(item, "assigned_to"),
-                opt_str(item, "updated_at")
-                    .unwrap_or_else(|| chrono::Utc::now().to_rfc3339()),
-                opt_str(item, "inserted_at")
-                    .unwrap_or_else(|| chrono::Utc::now().to_rfc3339()),
+                opt_str(item, "updated_at").unwrap_or_else(|| chrono::Utc::now().to_rfc3339()),
+                opt_str(item, "inserted_at").unwrap_or_else(|| chrono::Utc::now().to_rfc3339()),
             ],
-        )
-        .map_err(|e| format!("Upsert task {} fehlgeschlagen: {}", id, e))?;
+        ).map_err(|e| format!("Upsert task {} fehlgeschlagen: {}", id, e))?;
     }
-
     Ok(())
 }
 
@@ -254,10 +220,7 @@ fn get_db_path(app: &AppHandle) -> Result<String, String> {
 }
 
 fn str_val(v: &serde_json::Value, key: &str) -> String {
-    v.get(key)
-        .and_then(|x| x.as_str())
-        .unwrap_or("")
-        .to_string()
+    v.get(key).and_then(|x| x.as_str()).unwrap_or("").to_string()
 }
 
 fn opt_str(v: &serde_json::Value, key: &str) -> Option<String> {
