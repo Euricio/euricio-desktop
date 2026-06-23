@@ -366,7 +366,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ session, dbPath }) => (
 
 // ── Properties stub (placeholder until full implementation) ────────────────────
 
-const PropertiesScreen: React.FC<{ dbPath: string }> = ({ dbPath }) => (
+const PropertiesScreen: React.FC<{ dbPath: string }> = () => (
   <div
     style={{
       flex: 1,

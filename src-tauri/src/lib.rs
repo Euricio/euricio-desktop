@@ -1,6 +1,5 @@
 use tauri::{Manager, Listener};
 
-mod commands;
 mod db;
 mod deep_link;
 mod i18n;
@@ -9,10 +8,16 @@ mod tray;
 
 rust_i18n::i18n!("i18n", fallback = "es");
 
+/// Resolve (and create) the app data directory where `crm.db` lives.
+#[tauri::command]
+fn get_app_data_dir(app: tauri::AppHandle) -> Result<String, String> {
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir.to_string_lossy().to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let migrations = db::migrations::all();
-
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
             deep_link::handle_args(app, argv);
@@ -24,23 +29,12 @@ pub fn run() {
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_store::Builder::default().build())
-        .plugin(
-            tauri_plugin_sql::Builder::default()
-                .add_migrations("sqlite:crm.db", migrations.crm)
-                .add_migrations("sqlite:auth.db", migrations.auth)
-                .add_migrations("sqlite:cache.db", migrations.cache)
-                .build(),
-        )
+        .plugin(tauri_plugin_sql::Builder::default().build())
         .setup(|app| {
             let locale = i18n::detect_system_locale();
             rust_i18n::set_locale(&locale);
 
             tray::setup(app)?;
-
-            let handle = app.handle().clone();
-            tauri::async_runtime::spawn(async move {
-                sync::engine::run(handle).await;
-            });
 
             let handle2 = app.handle().clone();
             app.listen("deep-link://new-url", move |event| {
@@ -54,19 +48,11 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            commands::auth::login,
-            commands::auth::logout,
-            commands::auth::get_session,
-            commands::auth::refresh_token,
-            commands::contacts::list_contacts,
-            commands::contacts::get_contact,
-            commands::contacts::upsert_contact,
-            commands::contacts::delete_contact,
-            commands::sync::trigger_sync,
-            commands::sync::get_sync_status,
-            commands::sync::reset_sync_cursors,
-            commands::calls::resolve_phone,
-            commands::calls::simulate_incoming_call,
+            get_app_data_dir,
+            db::migrations::run_migrations,
+            sync::pull::sync_now,
+            sync::pull::get_outbox_count,
+            sync::pull::get_last_sync,
         ])
         .run(tauri::generate_context!())
         .expect("Euricio Desktop konnte nicht gestartet werden");

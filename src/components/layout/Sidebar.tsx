@@ -16,12 +16,6 @@ interface SidebarProps {
   onLogout: () => void;
 }
 
-interface NavItem {
-  id: Screen;
-  label: string;
-  icon: React.ReactNode;
-}
-
 const COLORS = {
   sidebarBg: '#1a4731',
   sidebarText: 'rgba(255,255,255,0.85)',
@@ -91,15 +85,6 @@ const IconLogout = () => (
     <line x1="21" y1="12" x2="9" y2="12" />
   </svg>
 );
-
-const NAV_ITEMS: NavItem[] = [
-  { id: 'leads', label: 'Dashboard', icon: <IconDashboard /> },
-  { id: 'pipeline', label: 'Pipeline', icon: <IconPipeline /> },
-  { id: 'leads', label: 'Leads', icon: <IconLeads /> },
-  { id: 'properties', label: 'Immobilien', icon: <IconProperties /> },
-  { id: 'tasks', label: 'Aufgaben', icon: <IconTasks /> },
-  { id: 'time-tracking', label: 'Zeiterfassung', icon: <IconTime /> },
-];
 
 // Deduplicate nav entries to avoid key collisions — Dashboard & Leads both map to 'leads',
 // so we track the label separately.
@@ -188,12 +173,6 @@ const Sidebar: React.FC<SidebarProps> = ({
       {/* Navigation */}
       <nav style={{ flex: 1, padding: '4px 10px', overflowY: 'auto' }}>
         {NAV_ITEMS_DISPLAY.map((item) => {
-          const isActive = currentScreen === item.id && item.key !== 'dashboard';
-          // Special: dashboard key is active only on 'leads' screen if coming from dashboard
-          const isHighlighted = item.key === 'dashboard'
-            ? currentScreen === 'leads'
-            : currentScreen === item.id;
-
           // For duplicate ids, use key to differentiate active
           const effectiveActive = item.key === 'dashboard'
             ? currentScreen === 'leads'

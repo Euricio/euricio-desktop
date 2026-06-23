@@ -18,12 +18,14 @@
     "i18next": "^23",
     "react": "^18",
     "react-dom": "^18",
-    "react-i18next": "^14"
+    "react-i18next": "^14",
+    "uuid": "^9.0.1"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2",
     "@types/react": "^18",
     "@types/react-dom": "^18",
+    "@types/uuid": "^10.0.0",
     "@vitejs/plugin-react": "^4",
     "typescript": "^5",
     "vite": "^5"

@@ -1,6 +1,13 @@
 use rusqlite::{Connection, Result};
 
-pub fn run_migrations(conn: &Connection) -> Result<()> {
+/// Tauri command: open the SQLite database at `db_path` and apply all migrations.
+#[tauri::command]
+pub fn run_migrations(db_path: String) -> std::result::Result<(), String> {
+    let conn = Connection::open(&db_path).map_err(|e| e.to_string())?;
+    apply_migrations(&conn).map_err(|e| e.to_string())
+}
+
+fn apply_migrations(conn: &Connection) -> Result<()> {
     conn.execute_batch(
         "PRAGMA journal_mode=WAL;
          PRAGMA foreign_keys=ON;",
