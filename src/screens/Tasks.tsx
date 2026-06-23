@@ -1,222 +1,681 @@
-import { useEffect, useState, useCallback } from "react";
-import { listen } from "@tauri-apps/api/event";
-import { useTranslation } from "react-i18next";
-// @ts-ignore
-import Database from "@tauri-apps/plugin-sql";
+import React, { useEffect, useState, useCallback } from 'react';
+import Database from '@tauri-apps/plugin-sql';
+import { listen } from '@tauri-apps/api/event';
+import { v4 as uuidv4 } from 'uuid';
 
-interface SessionInfo {
-  user_id: string;
-  email: string;
-  access_token: string;
-}
-
-interface Task {
-  id: string;
+interface TaskWithLead {
+  id: number;
   title: string;
   description: string | null;
   due_date: string | null;
-  priority: "low" | "medium" | "high";
-  status: "pending" | "in_progress" | "done" | "cancelled";
-  contact_id: string | null;
-  contact_name: string | null;
+  status: string;
+  priority: string;
+  task_type: string | null;
+  lead_id: number | null;
+  lead_name: string | null;
+  assigned_to: string | null;
+  completed_at: string | null;
+  created_at: string | null;
+  updated_at: string | null;
 }
 
 interface TasksProps {
-  session: SessionInfo;
+  dbPath: string;
+  userId: string;
+  onSelectLead?: (leadId: number) => void;
 }
 
-const PRIORITY_COLOR = {
-  low:    "#22c55e",
-  medium: "#f59e0b",
-  high:   "#ef4444",
+type FilterMode = 'open' | 'today' | 'all';
+
+const COLORS = {
+  bg: '#f5f0e8',
+  surface: '#ffffff',
+  border: '#e8e2d9',
+  text: '#1a1a1a',
+  muted: '#6b7280',
+  primary: '#1a4731',
+  primaryLight: '#2d6a4f',
+  accent: '#4ade80',
 };
 
-const STATUS_LABEL: Record<string, string> = {
-  pending:     "Offen",
-  in_progress: "In Bearbeitung",
-  done:        "Erledigt",
-  cancelled:   "Abgebrochen",
+const PRIORITY_COLORS: Record<string, { bg: string; text: string }> = {
+  low: { bg: '#f3f4f6', text: '#6b7280' },
+  medium: { bg: '#fef3c7', text: '#d97706' },
+  high: { bg: '#fee2e2', text: '#dc2626' },
+  urgent: { bg: '#fce7f3', text: '#be185d' },
 };
 
-export default function Tasks({ session }: TasksProps) {
-  const { t } = useTranslation();
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [filter, setFilter] = useState<"all" | "pending" | "in_progress" | "done">("all");
-  const [loading, setLoading] = useState(true);
+const PRIORITY_LABELS: Record<string, string> = {
+  low: 'Niedrig',
+  medium: 'Mittel',
+  high: 'Hoch',
+  urgent: 'Dringend',
+};
 
-  const loadTasks = useCallback(async () => {
-    try {
-      const db = await Database.load("sqlite:crm.db");
-      const where =
-        filter === "all"
-          ? "t.deleted_at IS NULL AND t.status != 'cancelled'"
-          : `t.deleted_at IS NULL AND t.status = '${filter}'`;
-
-      const rows = await db.select(
-        `SELECT t.id, t.title, t.description, t.due_date, t.priority, t.status,
-                t.contact_id,
-                (c.first_name || ' ' || COALESCE(c.last_name, '')) AS contact_name
-         FROM tasks t
-         LEFT JOIN contacts c ON c.id = t.contact_id
-         WHERE ${where}
-         ORDER BY
-           CASE t.priority WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END,
-           t.due_date ASC NULLS LAST
-         LIMIT 200`,
-        []
-      );
-      setTasks(rows);
-    } catch (err) {
-      console.error("Tasks laden fehlgeschlagen:", err);
-    } finally {
-      setLoading(false);
-    }
-  }, [filter]);
-
-  useEffect(() => { loadTasks(); }, [loadTasks]);
-
-  useEffect(() => {
-    const unlisten = listen("sync:data-updated", () => loadTasks());
-    return () => { unlisten.then((fn) => fn()); };
-  }, [loadTasks]);
-
-  function formatDueDate(dateStr: string | null): { label: string; overdue: boolean } {
-    if (!dateStr) return { label: "", overdue: false };
-    const d = new Date(dateStr);
-    const now = new Date();
-    const overdue = d < now;
-    const label = d.toLocaleDateString(undefined, { day: "2-digit", month: "short" });
-    return { label, overdue };
-  }
-
-  const filters: { key: typeof filter; label: string }[] = [
-    { key: "all",         label: "Alle" },
-    { key: "pending",     label: "Offen" },
-    { key: "in_progress", label: "In Bearbeitung" },
-    { key: "done",        label: "Erledigt" },
-  ];
-
+function isToday(dateStr: string | null): boolean {
+  if (!dateStr) return false;
+  const d = new Date(dateStr);
+  const now = new Date();
   return (
-    <div style={styles.page}>
-      <div style={styles.header}>
-        <h2 style={styles.title}>{t("tasks.title")}</h2>
-        <div style={styles.count}>{tasks.length}</div>
-      </div>
-
-      {/* Filter-Tabs */}
-      <div style={styles.tabs}>
-        {filters.map((f) => (
-          <button
-            key={f.key}
-            onClick={() => setFilter(f.key)}
-            style={{
-              ...styles.tab,
-              ...(filter === f.key ? styles.tabActive : {}),
-            }}
-          >
-            {f.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Liste */}
-      {loading ? (
-        <div style={styles.empty}>{t("common.loading")}</div>
-      ) : tasks.length === 0 ? (
-        <div style={styles.empty}>{t("tasks.noTasks")}</div>
-      ) : (
-        <div style={styles.list}>
-          {tasks.map((task) => {
-            const due = formatDueDate(task.due_date);
-            return (
-              <div key={task.id} style={styles.card}>
-                {/* Priority Bar */}
-                <div
-                  style={{
-                    ...styles.priorityBar,
-                    background: PRIORITY_COLOR[task.priority] ?? "#9ca3af",
-                  }}
-                />
-
-                <div style={styles.cardBody}>
-                  <div style={styles.cardTop}>
-                    <span style={styles.taskTitle}>{task.title}</span>
-                    <span
-                      style={{
-                        ...styles.statusBadge,
-                        background: task.status === "done" ? "#dcfce7" : task.status === "in_progress" ? "#dbeafe" : "#f3f4f6",
-                        color: task.status === "done" ? "#15803d" : task.status === "in_progress" ? "#1d4ed8" : "#374151",
-                      }}
-                    >
-                      {STATUS_LABEL[task.status] ?? task.status}
-                    </span>
-                  </div>
-
-                  {task.description && (
-                    <p style={styles.description}>{task.description}</p>
-                  )}
-
-                  <div style={styles.cardMeta}>
-                    {task.contact_name?.trim() && (
-                      <span style={styles.meta}>👤 {task.contact_name.trim()}</span>
-                    )}
-                    {due.label && (
-                      <span
-                        style={{
-                          ...styles.meta,
-                          color: due.overdue ? "#ef4444" : "#6b7280",
-                          fontWeight: due.overdue ? 600 : 400,
-                        }}
-                      >
-                        📅 {due.label}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate()
   );
 }
 
-const styles: Record<string, React.CSSProperties> = {
-  page: { display: "flex", flexDirection: "column", gap: "16px", height: "100%" },
-  header: { display: "flex", alignItems: "center", gap: "10px" },
-  title: { margin: 0, fontSize: "22px", fontWeight: "700", color: "#111827" },
-  count: {
-    background: "#e5e7eb", color: "#374151",
-    fontSize: "12px", fontWeight: "700",
-    padding: "2px 8px", borderRadius: "10px",
-  },
-  tabs: { display: "flex", gap: "4px" },
-  tab: {
-    padding: "6px 14px", borderRadius: "20px",
-    border: "1.5px solid #e5e7eb",
-    background: "white", color: "#374151",
-    fontSize: "13px", fontWeight: "500", cursor: "pointer",
-  },
-  tabActive: {
-    background: "#0a1628", color: "white", borderColor: "#0a1628",
-  },
-  list: { display: "flex", flexDirection: "column", gap: "8px", overflowY: "auto", flex: 1 },
-  card: {
-    background: "white", borderRadius: "10px",
-    boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
-    display: "flex", overflow: "hidden",
-  },
-  priorityBar: { width: "4px", flexShrink: 0 },
-  cardBody: { flex: 1, padding: "12px 14px", display: "flex", flexDirection: "column", gap: "6px" },
-  cardTop: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "8px" },
-  taskTitle: { fontWeight: "600", fontSize: "14px", color: "#111827", flex: 1 },
-  statusBadge: {
-    fontSize: "11px", fontWeight: "600", padding: "2px 8px",
-    borderRadius: "10px", flexShrink: 0,
-  },
-  description: { margin: 0, fontSize: "12px", color: "#6b7280", lineHeight: 1.4 },
-  cardMeta: { display: "flex", gap: "12px", flexWrap: "wrap" },
-  meta: { fontSize: "11px", color: "#6b7280" },
-  empty: { textAlign: "center", color: "#9ca3af", padding: "40px", fontSize: "14px" },
+function isOverdue(dateStr: string | null): boolean {
+  if (!dateStr) return false;
+  const d = new Date(dateStr);
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  return d < now;
+}
+
+function formatDate(iso: string | null): string {
+  if (!iso) return '–';
+  const d = new Date(iso);
+  return d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
+async function addToOutbox(
+  db: Database,
+  tableName: string,
+  recordId: string | number,
+  operation: string,
+  payload: Record<string, unknown>
+) {
+  const now = new Date().toISOString();
+  await db.execute(
+    `INSERT INTO outbox (id, table_name, record_id, operation, payload, attempts, created_at)
+     VALUES ($1, $2, $3, $4, $5, 0, $6)`,
+    [uuidv4(), tableName, String(recordId), operation, JSON.stringify(payload), now]
+  );
+}
+
+const Tasks: React.FC<TasksProps> = ({ dbPath, userId, onSelectLead }) => {
+  const [tasks, setTasks] = useState<TaskWithLead[]>([]);
+  const [filtered, setFiltered] = useState<TaskWithLead[]>([]);
+  const [filterMode, setFilterMode] = useState<FilterMode>('open');
+  const [search, setSearch] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [hoveredId, setHoveredId] = useState<number | null>(null);
+
+  // New task form
+  const [showNewTask, setShowNewTask] = useState(false);
+  const [newTitle, setNewTitle] = useState('');
+  const [newDueDate, setNewDueDate] = useState('');
+  const [newPriority, setNewPriority] = useState('medium');
+  const [newDescription, setNewDescription] = useState('');
+
+  const loadTasks = useCallback(async () => {
+    try {
+      const db = await Database.load(`sqlite:${dbPath}`);
+      const rows = await db.select<TaskWithLead[]>(
+        `SELECT t.id, t.title, t.description, t.due_date, t.status, t.priority,
+                t.task_type, t.lead_id, l.full_name AS lead_name,
+                t.assigned_to, t.completed_at, t.created_at, t.updated_at
+         FROM tasks t
+         LEFT JOIN leads l ON l.id = t.lead_id
+         WHERE t.deleted_at IS NULL
+         ORDER BY
+           CASE t.priority
+             WHEN 'urgent' THEN 1
+             WHEN 'high' THEN 2
+             WHEN 'medium' THEN 3
+             WHEN 'low' THEN 4
+             ELSE 5
+           END,
+           t.due_date ASC NULLS LAST,
+           t.created_at DESC`
+      );
+      setTasks(rows);
+    } catch (err) {
+      console.error('loadTasks error:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [dbPath]);
+
+  useEffect(() => {
+    loadTasks();
+
+    const unlisten = listen('sync:data-updated', () => {
+      loadTasks();
+    });
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, [loadTasks]);
+
+  useEffect(() => {
+    let result = tasks;
+
+    if (filterMode === 'open') {
+      result = result.filter((t) => t.status === 'open' || t.status === 'in_progress');
+    } else if (filterMode === 'today') {
+      result = result.filter(
+        (t) =>
+          (t.status === 'open' || t.status === 'in_progress') &&
+          (isToday(t.due_date) || isOverdue(t.due_date))
+      );
+    }
+
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      result = result.filter(
+        (t) =>
+          t.title.toLowerCase().includes(q) ||
+          (t.description ?? '').toLowerCase().includes(q) ||
+          (t.lead_name ?? '').toLowerCase().includes(q)
+      );
+    }
+
+    setFiltered(result);
+  }, [tasks, filterMode, search]);
+
+  const completeTask = async (taskId: number) => {
+    try {
+      const db = await Database.load(`sqlite:${dbPath}`);
+      const now = new Date().toISOString();
+      await db.execute(
+        `UPDATE tasks SET status = 'done', completed_at = $1, updated_at = $1, synced = 0 WHERE id = $2`,
+        [now, taskId]
+      );
+      await addToOutbox(db, 'tasks', taskId, 'upsert', {
+        id: taskId,
+        status: 'done',
+        completed_at: now,
+        updated_at: now,
+      });
+      await loadTasks();
+    } catch (err) {
+      console.error('completeTask error:', err);
+    }
+  };
+
+  const createTask = async () => {
+    if (!newTitle.trim()) return;
+    try {
+      const db = await Database.load(`sqlite:${dbPath}`);
+      const now = new Date().toISOString();
+      await db.execute(
+        `INSERT INTO tasks (title, description, due_date, status, priority, created_by, synced, created_at, updated_at)
+         VALUES ($1, $2, $3, 'open', $4, $5, 0, $6, $6)`,
+        [newTitle.trim(), newDescription.trim() || null, newDueDate || null, newPriority, userId, now]
+      );
+
+      const rows = await db.select<{ id: number }[]>(
+        `SELECT id FROM tasks WHERE created_by = $1 ORDER BY created_at DESC LIMIT 1`,
+        [userId]
+      );
+      if (rows.length > 0) {
+        await addToOutbox(db, 'tasks', rows[0].id, 'insert', {
+          id: rows[0].id,
+          title: newTitle.trim(),
+          description: newDescription.trim() || null,
+          due_date: newDueDate || null,
+          status: 'open',
+          priority: newPriority,
+          created_by: userId,
+          created_at: now,
+          updated_at: now,
+        });
+      }
+
+      setNewTitle('');
+      setNewDueDate('');
+      setNewPriority('medium');
+      setNewDescription('');
+      setShowNewTask(false);
+      await loadTasks();
+    } catch (err) {
+      console.error('createTask error:', err);
+    }
+  };
+
+  const openCount = tasks.filter((t) => t.status === 'open' || t.status === 'in_progress').length;
+  const todayCount = tasks.filter(
+    (t) =>
+      (t.status === 'open' || t.status === 'in_progress') &&
+      (isToday(t.due_date) || isOverdue(t.due_date))
+  ).length;
+
+  const inputStyle: React.CSSProperties = {
+    width: '100%',
+    padding: '8px 10px',
+    borderRadius: 7,
+    border: `1px solid ${COLORS.border}`,
+    backgroundColor: COLORS.surface,
+    fontSize: 14,
+    color: COLORS.text,
+    outline: 'none',
+    boxSizing: 'border-box',
+  };
+
+  const labelStyle: React.CSSProperties = {
+    fontSize: 11,
+    fontWeight: 600,
+    color: COLORS.muted,
+    textTransform: 'uppercase',
+    letterSpacing: '0.5px',
+    marginBottom: 4,
+    display: 'block',
+  };
+
+  return (
+    <div
+      style={{
+        flex: 1,
+        display: 'flex',
+        flexDirection: 'column',
+        backgroundColor: COLORS.bg,
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+        overflow: 'hidden',
+      }}
+    >
+      {/* Header */}
+      <div style={{ padding: '24px 28px 0', flexShrink: 0 }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginBottom: 16,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <h1 style={{ margin: 0, fontSize: 24, fontWeight: 700, color: COLORS.text }}>
+              Aufgaben
+            </h1>
+            <span
+              style={{
+                backgroundColor: COLORS.primary,
+                color: '#ffffff',
+                fontSize: 12,
+                fontWeight: 600,
+                padding: '2px 8px',
+                borderRadius: 12,
+              }}
+            >
+              {filtered.length}
+            </span>
+          </div>
+
+          <button
+            onClick={() => setShowNewTask(!showNewTask)}
+            style={{
+              padding: '8px 14px',
+              borderRadius: 8,
+              border: 'none',
+              backgroundColor: COLORS.primary,
+              color: '#fff',
+              fontSize: 13,
+              fontWeight: 500,
+              cursor: 'pointer',
+            }}
+          >
+            + Neue Aufgabe
+          </button>
+        </div>
+
+        {/* Search */}
+        <div style={{ position: 'relative', marginBottom: 12 }}>
+          <svg
+            style={{
+              position: 'absolute',
+              left: 12,
+              top: '50%',
+              transform: 'translateY(-50%)',
+              color: COLORS.muted,
+              pointerEvents: 'none',
+            }}
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <circle cx="11" cy="11" r="8" />
+            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+          <input
+            type="text"
+            placeholder="Aufgaben suchen…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            style={{
+              ...inputStyle,
+              paddingLeft: 34,
+            }}
+          />
+        </div>
+
+        {/* Filter pills */}
+        <div style={{ display: 'flex', gap: 6, paddingBottom: 16 }}>
+          {(
+            [
+              { id: 'open', label: 'Offen', count: openCount },
+              { id: 'today', label: 'Fällig heute', count: todayCount },
+              { id: 'all', label: 'Alle' },
+            ] as { id: FilterMode; label: string; count?: number }[]
+          ).map((f) => (
+            <button
+              key={f.id}
+              onClick={() => setFilterMode(f.id)}
+              style={{
+                padding: '5px 12px',
+                borderRadius: 20,
+                border: filterMode === f.id ? 'none' : `1px solid ${COLORS.border}`,
+                backgroundColor: filterMode === f.id ? COLORS.primary : COLORS.surface,
+                color: filterMode === f.id ? '#ffffff' : COLORS.muted,
+                fontSize: 12,
+                fontWeight: filterMode === f.id ? 600 : 400,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 5,
+              }}
+            >
+              {f.label}
+              {f.count != null && f.count > 0 && (
+                <span
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 700,
+                    backgroundColor:
+                      filterMode === f.id ? 'rgba(255,255,255,0.25)' : '#e5e7eb',
+                    color: filterMode === f.id ? '#fff' : COLORS.muted,
+                    padding: '0 5px',
+                    borderRadius: 8,
+                  }}
+                >
+                  {f.count}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* New task form */}
+      {showNewTask && (
+        <div
+          style={{
+            margin: '0 28px 16px',
+            backgroundColor: COLORS.surface,
+            border: `1px solid ${COLORS.border}`,
+            borderRadius: 10,
+            padding: 16,
+            flexShrink: 0,
+          }}
+        >
+          <div style={{ marginBottom: 12 }}>
+            <label style={labelStyle}>Titel *</label>
+            <input
+              type="text"
+              value={newTitle}
+              onChange={(e) => setNewTitle(e.target.value)}
+              placeholder="Aufgabe beschreiben…"
+              style={inputStyle}
+              autoFocus
+            />
+          </div>
+          <div style={{ marginBottom: 12 }}>
+            <label style={labelStyle}>Beschreibung</label>
+            <textarea
+              rows={2}
+              value={newDescription}
+              onChange={(e) => setNewDescription(e.target.value)}
+              style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.5 }}
+            />
+          </div>
+          <div style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
+            <div style={{ flex: 1 }}>
+              <label style={labelStyle}>Fällig am</label>
+              <input
+                type="date"
+                value={newDueDate}
+                onChange={(e) => setNewDueDate(e.target.value)}
+                style={inputStyle}
+              />
+            </div>
+            <div style={{ flex: 1 }}>
+              <label style={labelStyle}>Priorität</label>
+              <select
+                value={newPriority}
+                onChange={(e) => setNewPriority(e.target.value)}
+                style={{ ...inputStyle, appearance: 'auto' }}
+              >
+                <option value="low">Niedrig</option>
+                <option value="medium">Mittel</option>
+                <option value="high">Hoch</option>
+                <option value="urgent">Dringend</option>
+              </select>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <button
+              onClick={() => {
+                setShowNewTask(false);
+                setNewTitle('');
+                setNewDescription('');
+                setNewDueDate('');
+                setNewPriority('medium');
+              }}
+              style={{
+                padding: '7px 14px',
+                borderRadius: 7,
+                border: `1px solid ${COLORS.border}`,
+                backgroundColor: COLORS.surface,
+                color: COLORS.muted,
+                cursor: 'pointer',
+                fontSize: 13,
+              }}
+            >
+              Abbrechen
+            </button>
+            <button
+              onClick={createTask}
+              disabled={!newTitle.trim()}
+              style={{
+                padding: '7px 14px',
+                borderRadius: 7,
+                border: 'none',
+                backgroundColor: COLORS.primary,
+                color: '#fff',
+                cursor: newTitle.trim() ? 'pointer' : 'not-allowed',
+                opacity: newTitle.trim() ? 1 : 0.5,
+                fontSize: 13,
+                fontWeight: 500,
+              }}
+            >
+              Erstellen
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Task list */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '0 28px 24px' }}>
+        {loading ? (
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              height: 200,
+              color: COLORS.muted,
+              fontSize: 14,
+            }}
+          >
+            Laden…
+          </div>
+        ) : filtered.length === 0 ? (
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'center',
+              alignItems: 'center',
+              height: 180,
+              color: COLORS.muted,
+              gap: 8,
+            }}
+          >
+            <svg
+              width="36"
+              height="36"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+            >
+              <path d="M9 11l3 3L22 4" />
+              <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+            </svg>
+            <span>Keine Aufgaben vorhanden</span>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {filtered.map((task) => {
+              const overdue =
+                task.status !== 'done' && isOverdue(task.due_date) && !isToday(task.due_date);
+              const dueToday = task.status !== 'done' && isToday(task.due_date);
+              const prioStyle = PRIORITY_COLORS[task.priority] ?? PRIORITY_COLORS.medium;
+
+              return (
+                <div
+                  key={task.id}
+                  onMouseEnter={() => setHoveredId(task.id)}
+                  onMouseLeave={() => setHoveredId(null)}
+                  style={{
+                    backgroundColor: COLORS.surface,
+                    border: `1px solid ${
+                      overdue
+                        ? '#fca5a5'
+                        : hoveredId === task.id
+                        ? COLORS.primary
+                        : COLORS.border
+                    }`,
+                    borderRadius: 10,
+                    padding: '13px 15px',
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: 12,
+                    opacity: task.status === 'done' ? 0.55 : 1,
+                    transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
+                    boxShadow:
+                      hoveredId === task.id
+                        ? '0 2px 8px rgba(26,71,49,0.08)'
+                        : '0 1px 3px rgba(0,0,0,0.04)',
+                  }}
+                >
+                  {/* Checkbox */}
+                  <input
+                    type="checkbox"
+                    checked={task.status === 'done'}
+                    onChange={() => task.status !== 'done' && completeTask(task.id)}
+                    style={{
+                      width: 17,
+                      height: 17,
+                      cursor: task.status !== 'done' ? 'pointer' : 'default',
+                      marginTop: 1,
+                      flexShrink: 0,
+                      accentColor: COLORS.primary,
+                    }}
+                  />
+
+                  {/* Content */}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div
+                      style={{
+                        fontSize: 14,
+                        fontWeight: 500,
+                        color: COLORS.text,
+                        textDecoration: task.status === 'done' ? 'line-through' : 'none',
+                        marginBottom: 3,
+                      }}
+                    >
+                      {task.title}
+                    </div>
+                    {task.description && (
+                      <div
+                        style={{
+                          fontSize: 12,
+                          color: COLORS.muted,
+                          marginBottom: 4,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {task.description}
+                      </div>
+                    )}
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px 10px', fontSize: 12 }}>
+                      {task.due_date && (
+                        <span
+                          style={{
+                            color: overdue
+                              ? '#ef4444'
+                              : dueToday
+                              ? '#f59e0b'
+                              : COLORS.muted,
+                            fontWeight: overdue || dueToday ? 600 : 400,
+                          }}
+                        >
+                          {overdue ? '⚠ Überfällig: ' : dueToday ? '● Heute: ' : ''}
+                          {formatDate(task.due_date)}
+                        </span>
+                      )}
+                      {task.lead_name && onSelectLead && task.lead_id != null && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onSelectLead(task.lead_id!);
+                          }}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            padding: 0,
+                            cursor: 'pointer',
+                            color: COLORS.primaryLight,
+                            fontSize: 12,
+                            fontWeight: 500,
+                            textDecoration: 'underline',
+                          }}
+                        >
+                          {task.lead_name}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Priority badge */}
+                  <span
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 600,
+                      padding: '2px 8px',
+                      borderRadius: 10,
+                      backgroundColor: prioStyle.bg,
+                      color: prioStyle.text,
+                      flexShrink: 0,
+                    }}
+                  >
+                    {PRIORITY_LABELS[task.priority] ?? task.priority}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
 };
+
+export default Tasks;
