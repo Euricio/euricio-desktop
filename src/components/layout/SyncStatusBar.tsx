@@ -1,160 +1,245 @@
-import { useEffect, useState } from "react";
-import { listen } from "@tauri-apps/api/event";
-import { invoke } from "@tauri-apps/api/core";
-import { useTranslation } from "react-i18next";
-
-interface SyncStatusEvent {
-  status: "synced" | "syncing" | "error" | "offline" | "pending";
-  message?: string;
-  timestamp: number;
-}
+import React, { useEffect, useState, useCallback } from 'react';
+import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 
 interface SyncStatusBarProps {
+  dbPath: string;
   accessToken: string;
+  userId: string;
 }
 
-export default function SyncStatusBar({ accessToken }: SyncStatusBarProps) {
-  const { t } = useTranslation();
-  const [status, setStatus] = useState<SyncStatusEvent["status"]>("synced");
-  const [lastSynced, setLastSynced] = useState<Date | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [pendingCount, setPendingCount] = useState(0);
+const COLORS = {
+  bg: '#ffffff',
+  border: '#e8e2d9',
+  text: '#1a1a1a',
+  muted: '#6b7280',
+  primary: '#1a4731',
+  accent: '#4ade80',
+  error: '#ef4444',
+};
+
+function formatRelativeTime(isoString: string | null): string {
+  if (!isoString) return 'Noch nie synchronisiert';
+
+  const date = new Date(isoString);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffSec = Math.floor(diffMs / 1000);
+  const diffMin = Math.floor(diffSec / 60);
+  const diffHour = Math.floor(diffMin / 60);
+
+  if (diffSec < 10) return 'Gerade eben';
+  if (diffSec < 60) return `vor ${diffSec} Sek.`;
+  if (diffMin < 60) return `vor ${diffMin} Min.`;
+  if (diffHour < 24) return `vor ${diffHour} Std.`;
+  return `am ${date.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}`;
+}
+
+const SyncStatusBar: React.FC<SyncStatusBarProps> = ({ dbPath, accessToken, userId }) => {
+  const [outboxCount, setOutboxCount] = useState<number>(0);
+  const [lastSync, setLastSync] = useState<string | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [relativeTime, setRelativeTime] = useState('');
+
+  const refreshStatus = useCallback(async () => {
+    try {
+      const count = await invoke<number>('get_outbox_count', { dbPath });
+      setOutboxCount(count);
+    } catch (_) {
+      // ignore
+    }
+
+    try {
+      const ts = await invoke<string | null>('get_last_sync', { dbPath });
+      setLastSync(ts ?? null);
+    } catch (_) {
+      // ignore
+    }
+  }, [dbPath]);
 
   useEffect(() => {
-    // Initial-Status laden
-    loadStatus();
+    refreshStatus();
 
-    // Auf Sync-Events hören
-    const unlisteners = [
-      listen<SyncStatusEvent>("sync:status", (event) => {
-        const { status, message, timestamp } = event.payload;
-        setStatus(status);
-        setError(message ?? null);
-        if (status === "synced") {
-          setLastSynced(new Date(timestamp * 1000));
-        }
-      }),
-      listen<boolean>("sync:online", (event) => {
-        if (!event.payload) setStatus("offline");
-      }),
-      listen<number>("sync:data-updated", () => {
-        loadStatus();
-      }),
-    ];
+    // Refresh relative time every 30 seconds
+    const interval = setInterval(() => {
+      setRelativeTime(formatRelativeTime(lastSync));
+    }, 30_000);
 
+    return () => clearInterval(interval);
+  }, [lastSync, refreshStatus]);
+
+  useEffect(() => {
+    setRelativeTime(formatRelativeTime(lastSync));
+  }, [lastSync]);
+
+  // Listen for sync completion events
+  useEffect(() => {
+    const unlisten = listen('sync:data-updated', () => {
+      refreshStatus();
+    });
     return () => {
-      unlisteners.forEach((p) => p.then((fn) => fn()));
+      unlisten.then((fn) => fn());
+    };
+  }, [refreshStatus]);
+
+  // Online/offline
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
     };
   }, []);
 
-  async function loadStatus() {
+  const handleSync = async () => {
+    if (isSyncing || !isOnline) return;
+    setIsSyncing(true);
+    setSyncError(null);
+
     try {
-      const s = await invoke<{
-        status: string;
-        last_synced_at: number | null;
-        pending_count: number;
-      }>("get_sync_status");
-      setPendingCount(s.pending_count);
-      if (s.last_synced_at) {
-        setLastSynced(new Date(s.last_synced_at * 1000));
-      }
-    } catch {
-      // ignore
+      await invoke('sync_now', { accessToken, userId, dbPath });
+      await refreshStatus();
+    } catch (err) {
+      setSyncError(typeof err === 'string' ? err : 'Sync fehlgeschlagen');
+    } finally {
+      setIsSyncing(false);
     }
-  }
-
-  function formatTime(d: Date): string {
-    const now = Date.now();
-    const diff = Math.floor((now - d.getTime()) / 1000);
-    if (diff < 60) return t("sync.justNow") || "gerade eben";
-    if (diff < 3600) return `${Math.floor(diff / 60)} min`;
-    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  }
-
-  const dot = {
-    synced:  "#22c55e",
-    syncing: "#f59e0b",
-    error:   "#ef4444",
-    offline: "#9ca3af",
-    pending: "#f59e0b",
-  }[status];
-
-  const label = {
-    synced:  lastSynced ? `${t("sync.synced")} · ${formatTime(lastSynced)}` : t("sync.synced"),
-    syncing: t("sync.syncing"),
-    error:   error ?? t("sync.error"),
-    offline: "Offline",
-    pending: `${pendingCount} ${t("sync.pending") || "ausstehend"}`,
-  }[status];
+  };
 
   return (
-    <div style={styles.bar}>
-      {/* Sync-Indikator */}
-      <div style={styles.left}>
+    <div
+      style={{
+        height: 36,
+        backgroundColor: COLORS.bg,
+        borderTop: `1px solid ${COLORS.border}`,
+        display: 'flex',
+        alignItems: 'center',
+        padding: '0 16px',
+        gap: 14,
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+        fontSize: 12,
+        color: COLORS.muted,
+        flexShrink: 0,
+      }}
+    >
+      {/* Online/Offline indicator */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
         <div
           style={{
-            ...styles.dot,
-            background: dot,
-            boxShadow: status === "syncing" ? `0 0 6px ${dot}` : undefined,
+            width: 7,
+            height: 7,
+            borderRadius: '50%',
+            backgroundColor: isOnline ? '#10b981' : '#9ca3af',
+            flexShrink: 0,
           }}
         />
-        <span style={styles.label}>{label}</span>
+        <span style={{ color: isOnline ? '#10b981' : '#9ca3af', fontWeight: 500 }}>
+          {isOnline ? 'Online' : 'Offline'}
+        </span>
       </div>
 
-      {/* Pending Badge */}
-      {pendingCount > 0 && status !== "syncing" && (
-        <div style={styles.badge}>{pendingCount}</div>
+      {/* Divider */}
+      <div style={{ width: 1, height: 16, backgroundColor: COLORS.border }} />
+
+      {/* Last sync */}
+      <span>
+        Letzter Sync:{' '}
+        <span style={{ color: COLORS.text, fontWeight: 500 }}>{relativeTime || '–'}</span>
+      </span>
+
+      {/* Outbox pending */}
+      {outboxCount > 0 && (
+        <>
+          <div style={{ width: 1, height: 16, backgroundColor: COLORS.border }} />
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+            }}
+          >
+            <div
+              style={{
+                width: 7,
+                height: 7,
+                borderRadius: '50%',
+                backgroundColor: '#f59e0b',
+                flexShrink: 0,
+              }}
+            />
+            <span>
+              <span style={{ color: '#f59e0b', fontWeight: 600 }}>{outboxCount}</span>{' '}
+              ausstehend
+            </span>
+          </div>
+        </>
       )}
 
-      {/* Spinner wenn syncing */}
-      {status === "syncing" && (
-        <div style={styles.spinner} />
+      {/* Error */}
+      {syncError && (
+        <>
+          <div style={{ width: 1, height: 16, backgroundColor: COLORS.border }} />
+          <span style={{ color: COLORS.error, fontWeight: 500 }} title={syncError}>
+            ⚠ Fehler
+          </span>
+        </>
       )}
+
+      {/* Spacer */}
+      <div style={{ flex: 1 }} />
+
+      {/* Sync button */}
+      <button
+        onClick={handleSync}
+        disabled={isSyncing || !isOnline}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 5,
+          padding: '4px 10px',
+          borderRadius: 6,
+          border: `1px solid ${COLORS.border}`,
+          backgroundColor: isSyncing ? '#f3f4f6' : '#ffffff',
+          color: isSyncing || !isOnline ? '#9ca3af' : COLORS.primary,
+          fontSize: 12,
+          fontWeight: 500,
+          cursor: isSyncing || !isOnline ? 'not-allowed' : 'pointer',
+          transition: 'all 0.15s ease',
+        }}
+      >
+        <svg
+          width="12"
+          height="12"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          style={{
+            animation: isSyncing ? 'spin 1s linear infinite' : 'none',
+          }}
+        >
+          <polyline points="23 4 23 10 17 10" />
+          <polyline points="1 20 1 14 7 14" />
+          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+        </svg>
+        {isSyncing ? 'Syncing…' : 'Sync'}
+      </button>
+
+      <style>{`
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
     </div>
   );
-}
-
-const styles: Record<string, React.CSSProperties> = {
-  bar: {
-    height: "28px",
-    background: "#1a2f4e",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    padding: "0 16px",
-    flexShrink: 0,
-  },
-  left: {
-    display: "flex",
-    alignItems: "center",
-    gap: "6px",
-  },
-  dot: {
-    width: "7px",
-    height: "7px",
-    borderRadius: "50%",
-    flexShrink: 0,
-    transition: "background 0.3s",
-  },
-  label: {
-    fontSize: "11px",
-    color: "rgba(255,255,255,0.6)",
-    fontWeight: "500",
-  },
-  badge: {
-    background: "#f59e0b",
-    color: "white",
-    fontSize: "10px",
-    fontWeight: "700",
-    padding: "1px 6px",
-    borderRadius: "10px",
-  },
-  spinner: {
-    width: "12px",
-    height: "12px",
-    border: "2px solid rgba(255,255,255,0.2)",
-    borderTopColor: "#0080ff",
-    borderRadius: "50%",
-    animation: "spin 0.8s linear infinite",
-  },
 };
+
+export default SyncStatusBar;
