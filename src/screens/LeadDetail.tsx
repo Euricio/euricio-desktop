@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import Database from '@tauri-apps/plugin-sql';
-import { v4 as uuidv4 } from 'uuid';
+
+const generateId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -182,7 +183,7 @@ async function addToOutbox(
   await db.execute(
     `INSERT INTO outbox (id, table_name, record_id, operation, payload, attempts, created_at)
      VALUES ($1, $2, $3, $4, $5, 0, $6)`,
-    [uuidv4(), tableName, String(recordId), operation, JSON.stringify(payload), now]
+    [generateId(), tableName, String(recordId), operation, JSON.stringify(payload), now]
   );
 }
 
