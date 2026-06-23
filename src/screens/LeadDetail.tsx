@@ -643,6 +643,21 @@ const LeadDetail: React.FC<LeadDetailProps> = ({ leadId, dbPath, userId, onBack 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
             {/* Left column */}
             <div>
+              {/* Click-to-call */}
+              {lead.phone && (
+                <div style={{ marginBottom: 16 }}>
+                  <PhoneButton
+                    phone={lead.phone}
+                    leadId={lead.id}
+                    leadName={lead.full_name}
+                    userId={userId}
+                    dbPath={dbPath}
+                    variant="full"
+                    onCallLogged={loadData}
+                  />
+                </div>
+              )}
+
               <div style={fieldGroupStyle}>
                 <label style={labelStyle}>Pipeline-Stage</label>
                 <select
